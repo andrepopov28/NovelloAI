@@ -2,7 +2,7 @@
 **Status:** Production-Ready (UAT Complete)
 **Supersedes:** V28
 **Last Updated:** 2026-02-18
-**Build Commit:** TBD (post-commit)
+**Build Commit:** 9ac63d8 (andrepopov28/NovelloAI, main)
 
 ---
 
