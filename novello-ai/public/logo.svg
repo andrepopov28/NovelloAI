@@ -1,0 +1,28 @@
+<svg width="240" height="80" viewBox="0 0 240 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="gold-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#d5a944" />
+      <stop offset="50%" stop-color="#f3dba3" />
+      <stop offset="100%" stop-color="#b88a2d" />
+    </linearGradient>
+    <linearGradient id="silver-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#c0c0c0" />
+      <stop offset="50%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#8e8e8e" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Stacked Diamonds Icon -->
+  <g transform="translate(10, 10) scale(0.6)">
+    <!-- Bottom Layer: Gold Solid -->
+    <path d="M50 85L100 60L50 35L0 60L50 85Z" fill="url(#gold-grad)" />
+    <!-- Middle Layer: Silver Solid -->
+    <path d="M50 60L100 35L50 10L0 35L50 60Z" fill="url(#silver-grad)" opacity="0.8" />
+    <!-- Top Layer: Gold Outline -->
+    <path d="M50 35L100 10L50 -15L0 10L50 35Z" stroke="url(#gold-grad)" stroke-width="4" fill="none" />
+  </g>
+  
+  <!-- Text: NOVELLO AI -->
+  <text x="85" y="52" font-family="'Inter', sans-serif" font-weight="700" font-size="24" fill="url(#gold-grad)" letter-spacing="0.05em">NOVELLO</text>
+  <text x="200" y="52" font-family="'Inter', sans-serif" font-weight="300" font-size="24" fill="url(#silver-grad)" letter-spacing="0.05em">AI</text>
+</svg>

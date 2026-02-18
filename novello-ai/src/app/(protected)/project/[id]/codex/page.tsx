@@ -1,0 +1,278 @@
+'use client';
+
+import { useState, use } from 'react';
+import { useRouter } from 'next/navigation';
+import { ArrowLeft, Plus, Trash2, Edit2, X, BookOpen, MapPin, Package, Scroll } from 'lucide-react';
+import { useEntities } from '@/lib/hooks/useEntities';
+import { Card } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { SkeletonCard } from '@/components/ui/Skeleton';
+import type { Entity } from '@/lib/types';
+
+const typeIcons: Record<Entity['type'], typeof BookOpen> = {
+    Character: BookOpen,
+    Location: MapPin,
+    Item: Package,
+    Lore: Scroll,
+};
+
+const typeColors: Record<Entity['type'], string> = {
+    Character: '#06b6d4',
+    Location: '#22c55e',
+    Item: '#f59e0b',
+    Lore: '#a855f7',
+};
+
+export default function CodexPage({ params }: { params: Promise<{ id: string }> }) {
+    const { id: projectId } = use(params);
+    const router = useRouter();
+    const { entities, loading, createEntity, updateEntity, deleteEntity } = useEntities(projectId);
+    const [showCreate, setShowCreate] = useState(false);
+    const [editingEntity, setEditingEntity] = useState<Entity | null>(null);
+    const [filter, setFilter] = useState<Entity['type'] | 'all'>('all');
+
+    const filteredEntities = filter === 'all' ? entities : entities.filter((e) => e.type === filter);
+
+    return (
+        <div className="max-w-5xl mx-auto px-6 py-10">
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-8">
+                <button
+                    onClick={() => router.push(`/project/${projectId}`)}
+                    className="p-2 rounded-[var(--radius-md)] transition-all hover:bg-[var(--surface-tertiary)] cursor-pointer"
+                    style={{ color: 'var(--text-tertiary)' }}
+                >
+                    <ArrowLeft size={16} />
+                </button>
+                <div className="flex-1">
+                    <h1 className="text-2xl font-semibold" style={{ color: 'var(--text-primary)' }}>
+                        World Bible
+                    </h1>
+                    <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
+                        Characters, locations, items, and lore
+                    </p>
+                </div>
+                <Button onClick={() => setShowCreate(true)}>
+                    <Plus size={16} />
+                    New Entity
+                </Button>
+            </div>
+
+            {/* Filter Tabs */}
+            <div className="flex gap-2 mb-6">
+                {(['all', 'Character', 'Location', 'Item', 'Lore'] as const).map((t) => (
+                    <button
+                        key={t}
+                        onClick={() => setFilter(t)}
+                        className={`
+              px-3 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer
+              ${filter === t
+                                ? 'text-white'
+                                : 'hover:bg-[var(--surface-tertiary)]'
+                            }
+            `}
+                        style={{
+                            backgroundColor: filter === t ? (t === 'all' ? 'var(--accent)' : typeColors[t]) : 'transparent',
+                            color: filter === t ? 'white' : 'var(--text-secondary)',
+                        }}
+                    >
+                        {t === 'all' ? 'All' : t + 's'}
+                    </button>
+                ))}
+            </div>
+
+            {/* Create Modal */}
+            {showCreate && (
+                <EntityModal
+                    onSave={async (data) => {
+                        await createEntity(data);
+                        setShowCreate(false);
+                    }}
+                    onClose={() => setShowCreate(false)}
+                />
+            )}
+
+            {/* Edit Modal */}
+            {editingEntity && (
+                <EntityModal
+                    initial={editingEntity}
+                    onSave={async (data) => {
+                        await updateEntity(editingEntity.id, data);
+                        setEditingEntity(null);
+                    }}
+                    onClose={() => setEditingEntity(null)}
+                />
+            )}
+
+            {/* Loading */}
+            {loading && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {[1, 2, 3].map((i) => <SkeletonCard key={i} />)}
+                </div>
+            )}
+
+            {/* Empty State */}
+            {!loading && filteredEntities.length === 0 && (
+                <div className="text-center py-16">
+                    <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>
+                        {filter === 'all' ? 'No entities yet. Create your first character or location.' : `No ${filter.toLowerCase()}s found.`}
+                    </p>
+                </div>
+            )}
+
+            {/* Entity Grid */}
+            {!loading && filteredEntities.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {filteredEntities.map((entity) => {
+                        const Icon = typeIcons[entity.type];
+                        const color = typeColors[entity.type];
+                        return (
+                            <Card key={entity.id} className="p-5 animate-slide-up">
+                                <div className="flex items-start justify-between mb-3">
+                                    <div
+                                        className="w-9 h-9 rounded-xl flex items-center justify-center"
+                                        style={{ background: color + '18', color }}
+                                    >
+                                        <Icon size={16} />
+                                    </div>
+                                    <div className="flex gap-1">
+                                        <button
+                                            onClick={() => setEditingEntity(entity)}
+                                            className="p-1.5 rounded-lg transition-all hover:bg-[var(--surface-tertiary)] cursor-pointer"
+                                            style={{ color: 'var(--text-tertiary)' }}
+                                        >
+                                            <Edit2 size={12} />
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                if (confirm(`Delete "${entity.name}"?`)) deleteEntity(entity.id);
+                                            }}
+                                            className="p-1.5 rounded-lg transition-all hover:bg-red-50 dark:hover:bg-red-950/20 cursor-pointer"
+                                            style={{ color: 'var(--text-tertiary)' }}
+                                        >
+                                            <Trash2 size={12} />
+                                        </button>
+                                    </div>
+                                </div>
+                                <h3 className="text-sm font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>
+                                    {entity.name}
+                                </h3>
+                                <span className="text-xs font-medium" style={{ color }}>{entity.type}</span>
+                                <p className="text-xs mt-2 line-clamp-3" style={{ color: 'var(--text-secondary)' }}>
+                                    {entity.description || 'No description.'}
+                                </p>
+                            </Card>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ─── Entity Modal ──────────────
+
+function EntityModal({
+    initial,
+    onSave,
+    onClose,
+}: {
+    initial?: Entity;
+    onSave: (data: { name: string; type: Entity['type']; description: string }) => Promise<void>;
+    onClose: () => void;
+}) {
+    const [name, setName] = useState(initial?.name || '');
+    const [type, setType] = useState<Entity['type']>(initial?.type || 'Character');
+    const [description, setDescription] = useState(initial?.description || '');
+    const [saving, setSaving] = useState(false);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!name.trim()) return;
+        setSaving(true);
+        await onSave({ name: name.trim(), type, description: description.trim() });
+        setSaving(false);
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
+            <div
+                className="rounded-[var(--radius-xl)] p-8 max-w-lg w-full animate-slide-up"
+                style={{
+                    background: 'var(--surface-secondary)',
+                    border: '1px solid var(--border)',
+                    boxShadow: 'var(--shadow-lg)',
+                }}
+            >
+                <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
+                        {initial ? 'Edit Entity' : 'New Entity'}
+                    </h2>
+                    <button onClick={onClose} className="p-2 rounded-lg hover:bg-[var(--surface-tertiary)] cursor-pointer">
+                        <X size={16} style={{ color: 'var(--text-tertiary)' }} />
+                    </button>
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <Input
+                        label="Name"
+                        placeholder="Elara Moonwhisper"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        required
+                        autoFocus
+                    />
+
+                    <div>
+                        <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                            Type
+                        </label>
+                        <div className="flex gap-2">
+                            {(['Character', 'Location', 'Item', 'Lore'] as const).map((t) => (
+                                <button
+                                    key={t}
+                                    type="button"
+                                    onClick={() => setType(t)}
+                                    className={`
+                    flex-1 py-2 rounded-[var(--radius-md)] text-xs font-medium transition-all cursor-pointer
+                  `}
+                                    style={{
+                                        backgroundColor: type === t ? typeColors[t] + '18' : 'var(--surface-tertiary)',
+                                        color: type === t ? typeColors[t] : 'var(--text-secondary)',
+                                        border: `1px solid ${type === t ? typeColors[t] + '40' : 'transparent'}`,
+                                    }}
+                                >
+                                    {t}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                            Description
+                        </label>
+                        <textarea
+                            placeholder="Describe this entity..."
+                            value={description}
+                            onChange={(e) => setDescription(e.target.value)}
+                            rows={4}
+                            className="w-full px-3.5 py-2.5 text-sm rounded-[var(--radius-md)] border border-[var(--border-strong)] bg-[var(--surface-secondary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)] resize-none"
+                            style={{ color: 'var(--text-primary)' }}
+                        />
+                    </div>
+
+                    <div className="flex gap-3 pt-2">
+                        <Button type="button" variant="secondary" onClick={onClose} className="flex-1">
+                            Cancel
+                        </Button>
+                        <Button type="submit" loading={saving} className="flex-1">
+                            {initial ? 'Save Changes' : 'Create'}
+                        </Button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+}
