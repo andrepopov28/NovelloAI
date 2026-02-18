@@ -11,6 +11,7 @@ import {
     Server,
     Sparkles,
     Zap,
+    Mic2,
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -29,6 +30,8 @@ interface SettingsState {
     ollamaModel: string;
     geminiModel: string;
     geminiApiKey: string;
+    elevenLabsKey: string;
+    openAiKey: string;
 }
 
 export default function AISettingsPage() {
@@ -38,7 +41,13 @@ export default function AISettingsPage() {
         ollamaModel: 'qwen2.5-coder:7b',
         geminiModel: 'gemini-2.0-flash',
         geminiApiKey: '',
+        elevenLabsKey: '',
+        openAiKey: '',
     });
+
+    // TTS key test states
+    const [elStatus, setElStatus] = useState<'untested' | 'testing' | 'ok' | 'error'>('untested');
+    const [oaiStatus, setOaiStatus] = useState<'untested' | 'testing' | 'ok' | 'error'>('untested');
 
     // Ollama state
     const [ollamaStatus, setOllamaStatus] = useState<'checking' | 'connected' | 'offline'>('checking');
@@ -137,6 +146,48 @@ export default function AISettingsPage() {
         const gb = bytes / (1024 * 1024 * 1024);
         return gb >= 1 ? `${gb.toFixed(1)} GB` : `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
     };
+
+    const testElevenLabs = useCallback(async () => {
+        if (!settings.elevenLabsKey.trim()) { toast.error('Enter an ElevenLabs API key first'); return; }
+        setElStatus('testing');
+        try {
+            const res = await fetch('https://api.elevenlabs.io/v1/user', {
+                headers: { 'xi-api-key': settings.elevenLabsKey },
+            });
+            if (res.ok) {
+                setElStatus('ok');
+                localStorage.setItem('novello-elevenlabs-key', settings.elevenLabsKey);
+                toast.success('ElevenLabs key saved!');
+            } else {
+                setElStatus('error');
+                toast.error('Invalid ElevenLabs key');
+            }
+        } catch {
+            setElStatus('error');
+            toast.error('Could not reach ElevenLabs');
+        }
+    }, [settings.elevenLabsKey]);
+
+    const testOpenAi = useCallback(async () => {
+        if (!settings.openAiKey.trim()) { toast.error('Enter an OpenAI API key first'); return; }
+        setOaiStatus('testing');
+        try {
+            const res = await fetch('https://api.openai.com/v1/models', {
+                headers: { 'Authorization': `Bearer ${settings.openAiKey}` },
+            });
+            if (res.ok) {
+                setOaiStatus('ok');
+                localStorage.setItem('novello-openai-key', settings.openAiKey);
+                toast.success('OpenAI key saved!');
+            } else {
+                setOaiStatus('error');
+                toast.error('Invalid OpenAI key');
+            }
+        } catch {
+            setOaiStatus('error');
+            toast.error('Could not reach OpenAI');
+        }
+    }, [settings.openAiKey]);
 
     return (
         <div className="settings-content">
@@ -289,6 +340,69 @@ export default function AISettingsPage() {
                                     </button>
                                 ))}
                             </div>
+                        </div>
+                    </div>
+                </Card>
+                {/* ── Premium TTS APIs ── */}
+                <Card className="settings-section">
+                    <div className="section-head">
+                        <div className="section-head-left">
+                            <Mic2 size={18} />
+                            <div>
+                                <h3 className="section-name">Premium TTS APIs</h3>
+                                <p className="section-desc">ElevenLabs &amp; OpenAI for high-quality audiobook narration. Keys are stored locally.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="section-body">
+                        {/* ElevenLabs */}
+                        <div className="tts-provider-block">
+                            <div className="tts-provider-header">
+                                <span className="tts-provider-name">⚡ ElevenLabs</span>
+                                {elStatus === 'ok' && <span className="status-badge status-online"><Check size={12} /> Connected</span>}
+                                {elStatus === 'error' && <span className="status-badge status-offline"><AlertCircle size={12} /> Error</span>}
+                                {elStatus === 'testing' && <span className="status-badge status-checking"><Loader2 size={12} className="animate-spin" /> Testing...</span>}
+                            </div>
+                            <div className="api-key-row">
+                                <div className="api-key-input-wrap">
+                                    <input
+                                        type="password"
+                                        value={settings.elevenLabsKey}
+                                        onChange={(e) => updateSettings({ elevenLabsKey: e.target.value })}
+                                        placeholder="ElevenLabs API key..."
+                                        className="api-key-input"
+                                    />
+                                </div>
+                                <Button onClick={testElevenLabs} disabled={elStatus === 'testing'}>
+                                    {elStatus === 'testing' ? <Loader2 size={14} className="animate-spin" /> : 'Save & Test'}
+                                </Button>
+                            </div>
+                            <p className="tts-provider-hint">Get your key at <a href="https://elevenlabs.io" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-warm)' }}>elevenlabs.io</a> — free tier available.</p>
+                        </div>
+
+                        {/* OpenAI */}
+                        <div className="tts-provider-block">
+                            <div className="tts-provider-header">
+                                <span className="tts-provider-name">✦ OpenAI TTS</span>
+                                {oaiStatus === 'ok' && <span className="status-badge status-online"><Check size={12} /> Connected</span>}
+                                {oaiStatus === 'error' && <span className="status-badge status-offline"><AlertCircle size={12} /> Error</span>}
+                                {oaiStatus === 'testing' && <span className="status-badge status-checking"><Loader2 size={12} className="animate-spin" /> Testing...</span>}
+                            </div>
+                            <div className="api-key-row">
+                                <div className="api-key-input-wrap">
+                                    <input
+                                        type="password"
+                                        value={settings.openAiKey}
+                                        onChange={(e) => updateSettings({ openAiKey: e.target.value })}
+                                        placeholder="OpenAI API key (sk-...)..."
+                                        className="api-key-input"
+                                    />
+                                </div>
+                                <Button onClick={testOpenAi} disabled={oaiStatus === 'testing'}>
+                                    {oaiStatus === 'testing' ? <Loader2 size={14} className="animate-spin" /> : 'Save & Test'}
+                                </Button>
+                            </div>
+                            <p className="tts-provider-hint">Get your key at <a href="https://platform.openai.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-warm)' }}>platform.openai.com</a> — tts-1-hd model recommended.</p>
                         </div>
                     </div>
                 </Card>
@@ -467,6 +581,10 @@ export default function AISettingsPage() {
                 .gemini-model-name { display: block; font-size: 0.9rem; font-weight: 600; color: var(--text-primary); }
                 .gemini-model-desc { display: block; font-size: 0.75rem; color: var(--text-tertiary); margin-top: 4px; }
                 .gemini-check { position: absolute; top: 12px; right: 12px; color: var(--accent-warm); }
+                .tts-provider-block { display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--surface-tertiary); }
+                .tts-provider-header { display: flex; align-items: center; justify-content: space-between; }
+                .tts-provider-name { font-size: 0.9rem; font-weight: 700; color: var(--text-primary); }
+                .tts-provider-hint { font-size: 0.75rem; color: var(--text-tertiary); margin: 0; }
             `}</style>
         </div>
     );

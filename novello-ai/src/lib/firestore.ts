@@ -47,7 +47,7 @@ export async function createProject(
         coverImage: '',
         settings: {
             aiProvider: 'ollama' as const,
-            modelName: 'llama3',
+            modelName: 'llama3.1:8b',
             temperature: 0.7,
             includeSeriesContext: false,
         },

@@ -361,16 +361,37 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                 </div>
 
                 {/* Editor Area */}
-                <div className="flex-1 overflow-y-auto px-12 py-6" style={{ background: 'var(--surface-primary)' }}>
+                <div className="flex-1 overflow-y-auto" style={{ background: 'var(--surface-primary)' }}>
                     {loading ? (
-                        <div className="max-w-2xl mx-auto space-y-3 pt-8">
-                            <Skeleton className="h-6 w-1/3" />
+                        <div className="max-w-4xl px-10 py-8 space-y-3">
+                            <Skeleton className="h-8 w-1/2" />
                             <Skeleton className="h-4 w-full" />
                             <Skeleton className="h-4 w-5/6" />
                             <Skeleton className="h-4 w-4/6" />
                         </div>
                     ) : activeChapter ? (
-                        <div className="max-w-2xl mx-auto">
+                        <div className="max-w-4xl px-10 py-8">
+                            {/* Chapter Title */}
+                            <h1
+                                style={{
+                                    fontFamily: 'var(--font-sans)',
+                                    fontSize: '1.6rem',
+                                    fontWeight: 700,
+                                    color: 'var(--text-primary)',
+                                    marginBottom: '0.25rem',
+                                    letterSpacing: '-0.02em',
+                                    lineHeight: 1.2,
+                                }}
+                            >
+                                {activeChapter.title}
+                            </h1>
+                            <div
+                                style={{
+                                    height: '1px',
+                                    background: 'var(--border)',
+                                    marginBottom: '0.5rem',
+                                }}
+                            />
                             <TipTapEditor
                                 content={editorContent}
                                 onChange={setEditorContent}

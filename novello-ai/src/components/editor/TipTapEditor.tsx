@@ -3,6 +3,10 @@
 import { useEditor, EditorContent, Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
+import Underline from '@tiptap/extension-underline';
+import TextAlign from '@tiptap/extension-text-align';
+import Image from '@tiptap/extension-image';
+import Link from '@tiptap/extension-link';
 import { useEffect, useMemo, useRef, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import { SuggestionProps, SuggestionKeyDownProps } from '@tiptap/suggestion';
@@ -10,6 +14,7 @@ import { InlineAssist } from './InlineAssist';
 import { MentionExtension } from './MentionExtension';
 import { MentionList, MentionListRef } from './MentionList';
 import { PassiveVoiceExtension } from './PassiveVoice';
+import { EditorToolbar } from './EditorToolbar';
 import { Entity } from '@/lib/types';
 
 interface TipTapEditorProps {
@@ -49,6 +54,25 @@ export function TipTapEditor({
     Placeholder.configure({
       placeholder,
       emptyEditorClass: 'is-editor-empty',
+    }),
+    Underline,
+    TextAlign.configure({
+      types: ['heading', 'paragraph'],
+    }),
+    Image.configure({
+      inline: false,
+      allowBase64: true,
+      HTMLAttributes: {
+        class: 'editor-image',
+      },
+    }),
+    Link.configure({
+      openOnClick: false,
+      HTMLAttributes: {
+        class: 'editor-link',
+        rel: 'noopener noreferrer',
+        target: '_blank',
+      },
     }),
     MentionExtension.configure({
       suggestion: {
@@ -155,6 +179,10 @@ export function TipTapEditor({
 
   return (
     <div className={`tiptap-wrapper ${className}`}>
+      {/* Formatting Toolbar */}
+      <EditorToolbar editor={editor} />
+
+      {/* Editor Content */}
       <EditorContent editor={editor} />
       {editor && <InlineAssist editor={editor} rollingContext={rollingContext} projectId={projectId} chapterId={chapterId} />}
 
@@ -235,6 +263,34 @@ export function TipTapEditor({
           margin: 2rem 0;
         }
 
+        .tiptap-wrapper .ProseMirror pre {
+          background: var(--surface-secondary);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 1rem 1.25rem;
+          margin: 1.5rem 0;
+          overflow-x: auto;
+        }
+
+        .tiptap-wrapper .ProseMirror pre code {
+          font-family: 'JetBrains Mono', 'Fira Code', monospace;
+          font-size: 0.875rem;
+          color: var(--text-primary);
+          background: none;
+          padding: 0;
+          border-radius: 0;
+        }
+
+        .tiptap-wrapper .ProseMirror code {
+          font-family: 'JetBrains Mono', 'Fira Code', monospace;
+          font-size: 0.875em;
+          background: var(--surface-secondary);
+          border: 1px solid var(--border);
+          border-radius: 4px;
+          padding: 0.1em 0.35em;
+          color: var(--accent);
+        }
+
         .tiptap-wrapper .ProseMirror .mention {
           color: var(--accent);
           font-weight: 600;
@@ -246,6 +302,40 @@ export function TipTapEditor({
         .tiptap-wrapper .ProseMirror .mention:hover {
           background: var(--accent-muted);
         }
+
+        /* Image styles */
+        .tiptap-wrapper .ProseMirror .editor-image {
+          max-width: 100%;
+          height: auto;
+          border-radius: 8px;
+          margin: 1.5rem 0;
+          display: block;
+          cursor: pointer;
+          border: 2px solid transparent;
+          transition: border-color 0.15s;
+        }
+
+        .tiptap-wrapper .ProseMirror .editor-image.ProseMirror-selectednode {
+          border-color: var(--accent);
+          outline: none;
+        }
+
+        /* Link styles */
+        .tiptap-wrapper .ProseMirror .editor-link {
+          color: var(--accent);
+          text-decoration: underline;
+          text-underline-offset: 2px;
+          cursor: pointer;
+        }
+
+        .tiptap-wrapper .ProseMirror .editor-link:hover {
+          color: var(--accent-warm);
+        }
+
+        /* Text alignment */
+        .tiptap-wrapper .ProseMirror [style*="text-align: center"] { text-align: center; }
+        .tiptap-wrapper .ProseMirror [style*="text-align: right"] { text-align: right; }
+        .tiptap-wrapper .ProseMirror [style*="text-align: justify"] { text-align: justify; }
       `}</style>
     </div>
   );

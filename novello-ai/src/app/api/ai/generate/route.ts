@@ -128,6 +128,25 @@ export async function POST(req: NextRequest) {
     } catch (error) {
         console.error('[AI Generate Error]', error);
         const message = error instanceof Error ? error.message : 'AI generation failed';
+
+        // Detect Gemini quota / rate-limit errors and return 429 so the client
+        // can show a proper "quota exhausted" message rather than a generic 500.
+        const isQuotaError =
+            message.includes('quota') ||
+            message.includes('rate limit') ||
+            message.includes('RESOURCE_EXHAUSTED') ||
+            message.includes('exceeded your current quota');
+
+        if (isQuotaError) {
+            return NextResponse.json(
+                {
+                    error: 'Gemini free-tier quota exhausted. The daily limit resets at midnight Pacific Time. You can switch to Ollama in Settings → AI, or wait for the quota to reset.',
+                    code: 'QUOTA_EXHAUSTED',
+                },
+                { status: 429 }
+            );
+        }
+
         return NextResponse.json({ error: message }, { status: 500 });
     }
 }

@@ -61,10 +61,11 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
                 <GlobalNav />
                 <main style={{
                     paddingTop: '80px', // Matches global-nav height (updated from 64px)
+                    paddingRight: 'var(--chatbox-width)', // Prevent content overlapping the fixed chatbox
                     minHeight: '100vh',
                     display: 'flex',
                     flexDirection: 'column',
-                    position: 'relative' // Add relative positioning context
+                    position: 'relative',
                 }}>
                     {children}
                 </main>

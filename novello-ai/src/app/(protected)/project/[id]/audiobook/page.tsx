@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState, useRef } from 'react';
+import { use, useState, useRef, useEffect, useCallback } from 'react';
 import {
     Headphones,
     Play,
@@ -13,6 +13,10 @@ import {
     Loader2,
     Sparkles,
     CheckCircle2,
+    ChevronDown,
+    X,
+    Check,
+    Settings2,
 } from 'lucide-react';
 import { useChapters } from '@/lib/hooks/useChapters';
 import { useAudiobook } from '@/lib/hooks/useAudiobook';
@@ -44,8 +48,121 @@ export default function AudiobookPage({ params }: { params: Promise<{ id: string
     const currentChapter = playback.currentChapterIndex >= 0 ? sortedChapters[playback.currentChapterIndex] : null;
     const speeds = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
-    // Filter available voices based on installed list for the Studio
-    const studioVoices = voices.filter(v => installedVoiceIds.includes(v.id));
+    // ── Voice Picker State ──
+    const [pickerOpen, setPickerOpen] = useState(false);
+    const [pickerTab, setPickerTab] = useState<'browser' | 'elevenlabs' | 'openai'>('browser');
+    const [ttsProvider, setTtsProvider] = useState<'browser' | 'elevenlabs' | 'openai'>('browser');
+    const [browserVoices, setBrowserVoices] = useState<SpeechSynthesisVoice[]>([]);
+    const [selectedBrowserVoice, setSelectedBrowserVoice] = useState<string>('');
+    const [elVoices, setElVoices] = useState<{ voice_id: string; name: string; labels?: Record<string, string> }[]>([]);
+    const [selectedElVoice, setSelectedElVoice] = useState<string>('');
+    const [selectedOaiVoice, setSelectedOaiVoice] = useState<string>('alloy');
+    const [elLoading, setElLoading] = useState(false);
+    const [previewingPickerVoice, setPreviewingPickerVoice] = useState<string | null>(null);
+    const pickerAudioRef = useRef<HTMLAudioElement | null>(null);
+
+    const OAI_VOICES = [
+        { id: 'alloy', name: 'Alloy', desc: 'Neutral' },
+        { id: 'echo', name: 'Echo', desc: 'Warm' },
+        { id: 'fable', name: 'Fable', desc: 'British' },
+        { id: 'onyx', name: 'Onyx', desc: 'Deep' },
+        { id: 'nova', name: 'Nova', desc: 'Bright' },
+        { id: 'shimmer', name: 'Shimmer', desc: 'Soft' },
+    ];
+
+    // Load persisted settings
+    useEffect(() => {
+        const p = localStorage.getItem('novello-tts-provider') as 'browser' | 'elevenlabs' | 'openai' | null;
+        if (p) { setTtsProvider(p); setPickerTab(p); }
+        setSelectedBrowserVoice(localStorage.getItem('novello-tts-voice') || '');
+        setSelectedElVoice(localStorage.getItem('novello-elevenlabs-voice') || '');
+        setSelectedOaiVoice(localStorage.getItem('novello-openai-tts-voice') || 'alloy');
+    }, []);
+
+    // Load browser voices
+    useEffect(() => {
+        const load = () => {
+            const raw = window.speechSynthesis.getVoices().filter(v => v.lang.startsWith('en'));
+            setBrowserVoices(raw);
+            if (!selectedBrowserVoice && raw.length > 0) setSelectedBrowserVoice(raw[0].name);
+        };
+        load();
+        window.speechSynthesis.onvoiceschanged = load;
+    }, [selectedBrowserVoice]);
+
+    // Fetch ElevenLabs voices when tab opens
+    const fetchElVoices = useCallback(async () => {
+        const key = localStorage.getItem('novello-elevenlabs-key');
+        if (!key || elVoices.length > 0) return;
+        setElLoading(true);
+        try {
+            const res = await fetch('https://api.elevenlabs.io/v1/voices', { headers: { 'xi-api-key': key } });
+            if (res.ok) { const d = await res.json(); setElVoices(d.voices || []); }
+        } catch { /* ignore */ }
+        finally { setElLoading(false); }
+    }, [elVoices.length]);
+
+    // TTS-aware speak: routes to correct provider
+    const speakWithProvider = useCallback((text: string, chapterIndex: number) => {
+        const provider = ttsProvider;
+        const elKey = localStorage.getItem('novello-elevenlabs-key');
+        const oaiKey = localStorage.getItem('novello-openai-key');
+        const oaiModel = localStorage.getItem('novello-openai-tts-model') || 'tts-1-hd';
+
+        if (provider === 'elevenlabs' && elKey && selectedElVoice) {
+            // ElevenLabs streaming
+            fetch(`https://api.elevenlabs.io/v1/text-to-speech/${selectedElVoice}`, {
+                method: 'POST',
+                headers: { 'xi-api-key': elKey, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text, model_id: 'eleven_multilingual_v2', voice_settings: { stability: 0.5, similarity_boost: 0.75 } }),
+            }).then(r => r.blob()).then(blob => {
+                const url = URL.createObjectURL(blob);
+                const audio = new Audio(url);
+                audio.play();
+            }).catch(() => toast.error('ElevenLabs playback failed'));
+            return;
+        }
+
+        if (provider === 'openai' && oaiKey && selectedOaiVoice) {
+            fetch('https://api.openai.com/v1/audio/speech', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${oaiKey}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model: oaiModel, voice: selectedOaiVoice, input: text }),
+            }).then(r => r.blob()).then(blob => {
+                const url = URL.createObjectURL(blob);
+                const audio = new Audio(url);
+                audio.play();
+            }).catch(() => toast.error('OpenAI TTS playback failed'));
+            return;
+        }
+
+        // Default: browser
+        speak(text, chapterIndex);
+    }, [ttsProvider, selectedElVoice, selectedOaiVoice, speak]);
+
+    const selectProvider = (p: 'browser' | 'elevenlabs' | 'openai') => {
+        setTtsProvider(p);
+        localStorage.setItem('novello-tts-provider', p);
+        toast.success(`Voice: ${p === 'browser' ? 'Browser' : p === 'elevenlabs' ? 'ElevenLabs' : 'OpenAI'}`);
+    };
+
+    const previewBrowserVoice = (voiceName: string) => {
+        window.speechSynthesis.cancel();
+        if (previewingPickerVoice === voiceName) { setPreviewingPickerVoice(null); return; }
+        const voice = browserVoices.find(v => v.name === voiceName);
+        if (!voice) return;
+        const utt = new SpeechSynthesisUtterance('This is a preview of the selected voice.');
+        utt.voice = voice;
+        utt.onend = () => setPreviewingPickerVoice(null);
+        setPreviewingPickerVoice(voiceName);
+        window.speechSynthesis.speak(utt);
+    };
+
+    const activeVoiceLabel = ttsProvider === 'browser'
+        ? (selectedBrowserVoice || 'Browser Voice')
+        : ttsProvider === 'elevenlabs'
+            ? (elVoices.find(v => v.voice_id === selectedElVoice)?.name || 'ElevenLabs')
+            : `OpenAI · ${selectedOaiVoice}`;
 
     const handleInstallVoice = (voiceId: string) => {
         setInstalledVoiceIds(prev => [...prev, voiceId]);
@@ -98,13 +215,13 @@ export default function AudiobookPage({ params }: { params: Promise<{ id: string
         } else if (playback.currentChapterIndex === index && !playback.isPlaying) {
             resume();
         } else {
-            speak(chapter.content || '', index);
+            speakWithProvider(chapter.content || '', index);
         }
     };
 
     const handlePlayAll = () => {
         if (sortedChapters.length > 0) {
-            speak(sortedChapters[0].content || '', 0);
+            speakWithProvider(sortedChapters[0].content || '', 0);
         }
     };
 
@@ -248,20 +365,16 @@ export default function AudiobookPage({ params }: { params: Promise<{ id: string
                                     </select>
                                 </div>
 
-                                {/* Voice */}
+                                {/* Voice Picker Button */}
                                 <div className="ab-voice-group">
                                     <Mic2 size={14} />
-                                    <select
-                                        value={playback.selectedVoiceId}
-                                        onChange={(e) => setVoice(e.target.value)}
-                                        className="ab-select ab-select-wide"
+                                    <button
+                                        className="ab-voice-picker-btn"
+                                        onClick={() => { setPickerOpen(true); if (pickerTab === 'elevenlabs') fetchElVoices(); }}
                                     >
-                                        {studioVoices.map((v) => (
-                                            <option key={v.id} value={v.id}>
-                                                {v.name} ({v.quality})
-                                            </option>
-                                        ))}
-                                    </select>
+                                        <span className="ab-voice-picker-label">{activeVoiceLabel}</span>
+                                        <ChevronDown size={13} />
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -703,7 +816,284 @@ export default function AudiobookPage({ params }: { params: Promise<{ id: string
                 .ab-spin {
                     animation: spin 1s linear infinite;
                 }
+                /* Voice Picker Button */
+                .ab-voice-picker-btn {
+                    display: inline-flex; align-items: center; gap: 7px;
+                    padding: 6px 12px; border-radius: var(--radius-md);
+                    border: 1px solid var(--border); background: var(--surface-tertiary);
+                    color: var(--text-primary); font-size: 0.8rem; font-weight: 600;
+                    cursor: pointer; transition: all 0.2s; max-width: 200px;
+                }
+                .ab-voice-picker-btn:hover { border-color: var(--border-strong); background: var(--surface-secondary); }
+                .ab-voice-picker-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+                /* Voice Picker Panel */
+                .vp-overlay {
+                    position: fixed; inset: 0; z-index: 200;
+                    background: rgba(0,0,0,0.5); backdrop-filter: blur(4px);
+                    display: flex; align-items: flex-end; justify-content: center;
+                }
+                .vp-panel {
+                    width: 100%; max-width: 640px; max-height: 80vh;
+                    background: var(--surface-secondary); border-radius: 20px 20px 0 0;
+                    border: 1px solid var(--border); border-bottom: none;
+                    display: flex; flex-direction: column; overflow: hidden;
+                    animation: vp-slide-up 0.25s ease;
+                }
+                @keyframes vp-slide-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+                .vp-header {
+                    display: flex; align-items: center; justify-content: space-between;
+                    padding: 20px 24px 16px; border-bottom: 1px solid var(--border);
+                }
+                .vp-header-left { display: flex; align-items: center; gap: 10px; color: var(--text-primary); }
+                .vp-title { font-size: 1rem; font-weight: 700; }
+                .vp-close {
+                    width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--border);
+                    background: var(--surface-tertiary); color: var(--text-secondary);
+                    display: flex; align-items: center; justify-content: center; cursor: pointer;
+                    transition: all 0.15s;
+                }
+                .vp-close:hover { background: var(--surface-primary); color: var(--text-primary); }
+                .vp-provider-row {
+                    display: flex; gap: 8px; padding: 14px 24px;
+                    border-bottom: 1px solid var(--border); background: var(--surface-tertiary);
+                }
+                .vp-provider-btn {
+                    display: inline-flex; align-items: center; gap: 6px;
+                    padding: 7px 14px; border-radius: var(--radius-md);
+                    border: 1.5px solid var(--border); background: var(--surface-secondary);
+                    color: var(--text-secondary); font-size: 0.78rem; font-weight: 600;
+                    cursor: pointer; transition: all 0.15s;
+                }
+                .vp-provider-btn:hover { border-color: var(--border-strong); color: var(--text-primary); }
+                .vp-provider-active { border-color: var(--accent-warm) !important; background: var(--accent-warm-muted) !important; color: var(--accent-warm) !important; }
+                .vp-tabs {
+                    display: flex; border-bottom: 1px solid var(--border); padding: 0 24px;
+                }
+                .vp-tab {
+                    position: relative; display: flex; align-items: center; gap: 6px;
+                    padding: 10px 16px; font-size: 0.82rem; font-weight: 600;
+                    color: var(--text-tertiary); background: none; border: none; cursor: pointer;
+                }
+                .vp-tab:hover { color: var(--text-primary); }
+                .vp-tab-active { color: var(--text-primary); }
+                .vp-tab-active::after {
+                    content: ''; position: absolute; bottom: -1px; left: 0; right: 0;
+                    height: 2px; background: var(--accent-warm); border-radius: 2px 2px 0 0;
+                }
+                .vp-tab-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent-warm); }
+                .vp-content { flex: 1; overflow-y: auto; padding: 16px 24px; }
+                .vp-voice-list { display: flex; flex-direction: column; gap: 6px; }
+                .vp-voice-row {
+                    display: flex; align-items: center; justify-content: space-between;
+                    padding: 10px 14px; border-radius: var(--radius-md);
+                    border: 1px solid var(--border); background: var(--surface-tertiary);
+                    cursor: pointer; transition: all 0.15s;
+                }
+                .vp-voice-row:hover { border-color: var(--border-strong); }
+                .vp-voice-selected { border-color: var(--accent-warm); background: var(--accent-warm-muted); }
+                .vp-voice-left { display: flex; align-items: center; gap: 10px; }
+                .vp-radio {
+                    width: 16px; height: 16px; border-radius: 50%;
+                    border: 2px solid var(--border-strong); flex-shrink: 0;
+                    display: flex; align-items: center; justify-content: center; transition: all 0.15s;
+                }
+                .vp-radio-on { border-color: var(--accent-warm); background: var(--accent-warm); color: white; }
+                .vp-voice-info { display: flex; flex-direction: column; gap: 1px; }
+                .vp-voice-name { font-size: 0.82rem; font-weight: 600; color: var(--text-primary); }
+                .vp-voice-lang { font-size: 0.7rem; color: var(--text-tertiary); }
+                .vp-voice-right { display: flex; align-items: center; gap: 8px; }
+                .vp-badge {
+                    padding: 2px 7px; border-radius: var(--radius-full);
+                    font-size: 0.65rem; font-weight: 700;
+                }
+                .vp-badge-neural { color: #10b981; background: rgba(16,185,129,0.12); }
+                .vp-preview-btn {
+                    display: inline-flex; align-items: center; gap: 4px;
+                    padding: 4px 9px; border-radius: var(--radius-sm);
+                    border: 1px solid var(--border); background: var(--surface-secondary);
+                    color: var(--text-secondary); font-size: 0.7rem; font-weight: 600;
+                    cursor: pointer; transition: all 0.15s;
+                }
+                .vp-preview-btn:hover { border-color: var(--border-strong); color: var(--text-primary); }
+                .vp-preview-stop { border-color: #ef4444; color: #ef4444; background: rgba(239,68,68,0.08); }
+                .vp-empty { color: var(--text-tertiary); font-size: 0.82rem; padding: 1rem 0; display: flex; align-items: center; gap: 8px; }
+                .vp-no-key {
+                    display: flex; align-items: flex-start; gap: 12px; padding: 16px;
+                    border-radius: var(--radius-md); border: 1px dashed var(--border);
+                    background: var(--surface-tertiary); color: var(--text-secondary);
+                    font-size: 0.82rem; margin-bottom: 8px;
+                }
+                .vp-oai-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+                .vp-oai-card {
+                    display: flex; flex-direction: column; gap: 3px;
+                    padding: 12px 14px; border-radius: var(--radius-md);
+                    border: 1.5px solid var(--border); background: var(--surface-tertiary);
+                    text-align: left; cursor: pointer; transition: all 0.15s;
+                }
+                .vp-oai-card:hover { border-color: var(--border-strong); }
+                .vp-oai-active { border-color: var(--accent-warm); background: var(--accent-warm-muted); }
+                .vp-oai-top { display: flex; align-items: center; justify-content: space-between; }
+                .vp-oai-name { font-size: 0.85rem; font-weight: 700; color: var(--text-primary); }
+                .vp-oai-desc { font-size: 0.72rem; color: var(--text-tertiary); }
+                .vp-footer {
+                    padding: 14px 24px; border-top: 1px solid var(--border);
+                    display: flex; justify-content: flex-end;
+                }
+                .vp-done-btn {
+                    display: inline-flex; align-items: center; gap: 7px;
+                    padding: 10px 24px; border-radius: var(--radius-md);
+                    background: var(--accent-warm); color: white;
+                    border: none; font-size: 0.85rem; font-weight: 700;
+                    cursor: pointer; transition: opacity 0.15s;
+                }
+                .vp-done-btn:hover { opacity: 0.9; }
             `}</style>
+
+            {/* ── Voice Picker Slide-Up Panel ── */}
+            {pickerOpen && (
+                <div className="vp-overlay" onClick={() => setPickerOpen(false)}>
+                    <div className="vp-panel" onClick={e => e.stopPropagation()}>
+                        {/* Panel Header */}
+                        <div className="vp-header">
+                            <div className="vp-header-left">
+                                <Mic2 size={18} />
+                                <span className="vp-title">Voice Picker</span>
+                            </div>
+                            <button className="vp-close" onClick={() => setPickerOpen(false)}><X size={18} /></button>
+                        </div>
+
+                        {/* Provider selector */}
+                        <div className="vp-provider-row">
+                            {(['browser', 'elevenlabs', 'openai'] as const).map(p => (
+                                <button
+                                    key={p}
+                                    className={`vp-provider-btn ${ttsProvider === p ? 'vp-provider-active' : ''}`}
+                                    onClick={() => selectProvider(p)}
+                                >
+                                    {ttsProvider === p && <Check size={12} />}
+                                    {p === 'browser' ? '🌐 Browser' : p === 'elevenlabs' ? '⚡ ElevenLabs' : '✦ OpenAI'}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Tabs */}
+                        <div className="vp-tabs">
+                            {(['browser', 'elevenlabs', 'openai'] as const).map(t => (
+                                <button
+                                    key={t}
+                                    className={`vp-tab ${pickerTab === t ? 'vp-tab-active' : ''}`}
+                                    onClick={() => { setPickerTab(t); if (t === 'elevenlabs') fetchElVoices(); }}
+                                >
+                                    {t === 'browser' ? 'Browser' : t === 'elevenlabs' ? 'ElevenLabs' : 'OpenAI TTS'}
+                                    {ttsProvider === t && <span className="vp-tab-dot" />}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Tab Content */}
+                        <div className="vp-content">
+                            {/* Browser Tab */}
+                            {pickerTab === 'browser' && (
+                                <div className="vp-voice-list">
+                                    {browserVoices.length === 0 && <p className="vp-empty">Loading voices...</p>}
+                                    {browserVoices.map(v => (
+                                        <div
+                                            key={v.name}
+                                            className={`vp-voice-row ${selectedBrowserVoice === v.name ? 'vp-voice-selected' : ''}`}
+                                            onClick={() => { setSelectedBrowserVoice(v.name); localStorage.setItem('novello-tts-voice', v.name); }}
+                                        >
+                                            <div className="vp-voice-left">
+                                                <div className={`vp-radio ${selectedBrowserVoice === v.name ? 'vp-radio-on' : ''}`}>
+                                                    {selectedBrowserVoice === v.name && <Check size={10} />}
+                                                </div>
+                                                <div className="vp-voice-info">
+                                                    <span className="vp-voice-name">{v.name}</span>
+                                                    <span className="vp-voice-lang">{v.lang}</span>
+                                                </div>
+                                            </div>
+                                            <div className="vp-voice-right">
+                                                {(v.localService || v.name.toLowerCase().includes('enhanced')) && (
+                                                    <span className="vp-badge vp-badge-neural">Neural</span>
+                                                )}
+                                                <button
+                                                    className={`vp-preview-btn ${previewingPickerVoice === v.name ? 'vp-preview-stop' : ''}`}
+                                                    onClick={e => { e.stopPropagation(); previewBrowserVoice(v.name); }}
+                                                >
+                                                    {previewingPickerVoice === v.name ? <Square size={10} /> : <Play size={10} />}
+                                                    {previewingPickerVoice === v.name ? 'Stop' : 'Preview'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* ElevenLabs Tab */}
+                            {pickerTab === 'elevenlabs' && (
+                                <div className="vp-voice-list">
+                                    {!localStorage.getItem('novello-elevenlabs-key') && (
+                                        <div className="vp-no-key">
+                                            <Settings2 size={20} />
+                                            <p>Add your ElevenLabs API key in <strong>Settings → AI & Models</strong> or <strong>Settings → Voice & TTS</strong>.</p>
+                                        </div>
+                                    )}
+                                    {elLoading && <p className="vp-empty"><Loader2 size={16} className="animate-spin" /> Loading voices...</p>}
+                                    {!elLoading && elVoices.map(v => (
+                                        <div
+                                            key={v.voice_id}
+                                            className={`vp-voice-row ${selectedElVoice === v.voice_id ? 'vp-voice-selected' : ''}`}
+                                            onClick={() => { setSelectedElVoice(v.voice_id); localStorage.setItem('novello-elevenlabs-voice', v.voice_id); }}
+                                        >
+                                            <div className="vp-voice-left">
+                                                <div className={`vp-radio ${selectedElVoice === v.voice_id ? 'vp-radio-on' : ''}`}>
+                                                    {selectedElVoice === v.voice_id && <Check size={10} />}
+                                                </div>
+                                                <div className="vp-voice-info">
+                                                    <span className="vp-voice-name">{v.name}</span>
+                                                    <span className="vp-voice-lang">{v.labels?.accent || 'en'}</span>
+                                                </div>
+                                            </div>
+                                            <span className="vp-badge" style={{ color: '#8b5cf6', background: 'rgba(139,92,246,0.12)' }}>ElevenLabs</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* OpenAI Tab */}
+                            {pickerTab === 'openai' && (
+                                <div className="vp-oai-grid">
+                                    {!localStorage.getItem('novello-openai-key') && (
+                                        <div className="vp-no-key" style={{ gridColumn: '1/-1' }}>
+                                            <Settings2 size={20} />
+                                            <p>Add your OpenAI API key in <strong>Settings → AI & Models</strong> or <strong>Settings → Voice & TTS</strong>.</p>
+                                        </div>
+                                    )}
+                                    {OAI_VOICES.map(v => (
+                                        <button
+                                            key={v.id}
+                                            className={`vp-oai-card ${selectedOaiVoice === v.id ? 'vp-oai-active' : ''}`}
+                                            onClick={() => { setSelectedOaiVoice(v.id); localStorage.setItem('novello-openai-tts-voice', v.id); }}
+                                        >
+                                            <div className="vp-oai-top">
+                                                <span className="vp-oai-name">{v.name}</span>
+                                                {selectedOaiVoice === v.id && <Check size={12} style={{ color: 'var(--accent-warm)' }} />}
+                                            </div>
+                                            <span className="vp-oai-desc">{v.desc}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="vp-footer">
+                            <button className="vp-done-btn" onClick={() => setPickerOpen(false)}>
+                                <Check size={14} /> Done
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
     );
 }
