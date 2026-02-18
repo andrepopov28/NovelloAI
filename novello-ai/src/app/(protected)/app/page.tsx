@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { ModuleCard } from '@/components/dashboard/ModuleCard';
 import { useProjects } from '@/lib/hooks/useProjects';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { useTheme } from '@/lib/hooks/useTheme';
+import { getThemeImage, isLightTheme } from '@/lib/theme-images';
 import { Plus, Clock, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -12,58 +14,24 @@ import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
 import type { Project } from '@/lib/types';
 
-const modules = [
-    {
-        title: 'Write',
-        description: 'Continue your manuscript with AI assistance',
-        href: '',
-        imageSrc: '/images/modules/write.png',
-        imageAlt: 'Vintage typewriter on oak desk',
-    },
-    {
-        title: 'Brainstorm',
-        description: 'Generate ideas and develop your story',
-        href: '/brainstorm',
-        imageSrc: '/images/modules/brainstorm.png',
-        imageAlt: 'Creative mind map with colorful connections',
-    },
-    {
-        title: 'Data',
-        description: 'Manage characters, places, and world-building',
-        href: '/codex',
-        imageSrc: '/images/kinetic/data.png',
-        imageAlt: 'Ancient library with leather-bound books',
-    },
-    {
-        title: 'Audiobook',
-        description: 'Create professional narration with AI voices',
-        href: '/audiobook',
-        imageSrc: '/images/kinetic/audiobook.png',
-        imageAlt: 'Professional studio microphone',
-    },
-    {
-        title: 'Publish',
-        description: 'Export and distribute your finished work',
-        href: '/publish',
-        imageSrc: '/images/kinetic/publish.png',
-        imageAlt: 'Modern bookstore shelf',
-    },
-    {
-        title: 'Settings',
-        description: 'Configure your writing environment',
-        href: '/settings',
-        imageSrc: '/images/kinetic/settings.png',
-        imageAlt: 'Swiss watch mechanism',
-    },
+const MODULE_META = [
+    { title: 'Write', description: 'Continue your manuscript with AI assistance', href: '', key: 'write' as const, imageAlt: 'Writing module' },
+    { title: 'Brainstorm', description: 'Generate ideas and develop your story', href: '/brainstorm', key: 'brainstorm' as const, imageAlt: 'Brainstorm module' },
+    { title: 'Data', description: 'Manage characters, places, and world-building', href: '/codex', key: 'data' as const, imageAlt: 'Data & Codex module' },
+    { title: 'Audiobook', description: 'Create professional narration with AI voices', href: '/audiobook', key: 'audiobook' as const, imageAlt: 'Audiobook module' },
+    { title: 'Publish', description: 'Export and distribute your finished work', href: '/publish', key: 'publish' as const, imageAlt: 'Publish module' },
+    { title: 'Settings', description: 'Configure your writing environment', href: '/settings', key: 'settings' as const, imageAlt: 'Settings module' },
 ];
 
 export default function DashboardPage() {
     const { projects, loading, createProject, deleteProject } = useProjects();
     const { user } = useAuth();
+    const { theme } = useTheme();
     const router = useRouter();
     const [showCreateProject, setShowCreateProject] = useState(false);
     const [newProjectTitle, setNewProjectTitle] = useState('');
     const [creating, setCreating] = useState(false);
+    const lightTheme = isLightTheme(theme);
 
     const handleCreateProject = async () => {
         if (!newProjectTitle.trim() || !user) return;
@@ -137,8 +105,16 @@ export default function DashboardPage() {
 
                 {/* Module Grid */}
                 <div className="grid grid-cols-2 gap-6 mb-16">
-                    {modules.map((module) => (
-                        <ModuleCard key={module.title} {...module} />
+                    {MODULE_META.map((mod) => (
+                        <ModuleCard
+                            key={mod.title}
+                            title={mod.title}
+                            description={mod.description}
+                            href={mod.href}
+                            imageSrc={getThemeImage(theme, mod.key)}
+                            imageAlt={mod.imageAlt}
+                            lightTheme={lightTheme}
+                        />
                     ))}
                 </div>
 
