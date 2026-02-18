@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import { useAuth } from '@/lib/hooks/useAuth';
 
 export interface PublishMetadata {
     author: string;
@@ -11,6 +12,7 @@ export interface PublishMetadata {
 }
 
 export function usePublish() {
+    const { user } = useAuth();
     const [metadata, setMetadata] = useState<PublishMetadata>({
         author: '',
         description: '',
@@ -30,9 +32,14 @@ export function usePublish() {
             setExporting(true);
             setExportError(null);
             try {
+                // ✅ FIX: Include Authorization header (was missing — caused 401)
+                const token = await user?.getIdToken();
                 const res = await fetch('/api/export/epub', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`,
+                    },
                     body: JSON.stringify({ projectId }),
                 });
                 if (!res.ok) {
@@ -53,7 +60,7 @@ export function usePublish() {
                 setExporting(false);
             }
         },
-        []
+        [user]
     );
 
     const exportPdf = useCallback(
@@ -61,7 +68,13 @@ export function usePublish() {
             setExporting(true);
             setExportError(null);
             try {
-                const res = await fetch(`/api/export/pdf?projectId=${projectId}`);
+                // ✅ FIX: Include Authorization header (was missing — caused 401)
+                const token = await user?.getIdToken();
+                const res = await fetch(`/api/export/pdf?projectId=${projectId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                    },
+                });
                 if (!res.ok) {
                     const data = await res.json();
                     throw new Error(data.error || 'PDF export failed');
@@ -80,7 +93,7 @@ export function usePublish() {
                 setExporting(false);
             }
         },
-        []
+        [user]
     );
 
     return {

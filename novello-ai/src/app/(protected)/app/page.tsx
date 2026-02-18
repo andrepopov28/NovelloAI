@@ -72,7 +72,7 @@ export default function DashboardPage() {
             const projectId = await createProject({
                 title: newProjectTitle,
                 genre: 'literary',
-                targetWordCount: 80000,
+                synopsis: '',
             });
             toast.success('Project created!');
             setShowCreateProject(false);

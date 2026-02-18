@@ -17,9 +17,12 @@
     "@tiptap/react": "^3.19.0",
     "@tiptap/starter-kit": "^3.19.0",
     "@tiptap/suggestion": "^3.19.0",
+    "@types/dompurify": "^3.0.5",
+    "@types/recharts": "^1.8.29",
     "ai": "^6.0.86",
     "date-fns": "^4.1.0",
     "docx": "^9.5.2",
+    "dompurify": "^3.3.1",
     "epub-gen-memory": "^1.1.2",
     "file-saver": "^2.0.5",
     "firebase": "^12.9.0",
@@ -31,7 +34,9 @@
     "nuqs": "^2.8.8",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "sonner": "^2.0.7"
+    "recharts": "^3.7.0",
+    "sonner": "^2.0.7",
+    "wavesurfer.js": "^7.12.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

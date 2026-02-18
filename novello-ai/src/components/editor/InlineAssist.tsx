@@ -49,7 +49,7 @@ export function InlineAssist({ editor, rollingContext = '', projectId, chapterId
         if (chapterId && user) {
             try {
                 const fullContent = editor.getHTML();
-                await saveVersion(chapterId, user.uid, fullContent, 'ai_insert');
+                await saveVersion(chapterId, user.uid, fullContent, 'ai-generation');
             } catch (err) {
                 console.error('Failed to save AI insert version:', err);
                 // Don't block the user flow, just log

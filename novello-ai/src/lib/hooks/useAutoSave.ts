@@ -83,7 +83,7 @@ export function useAutoSave(
                 // Check version threshold: 60 seconds (PRD US-004-01)
                 const now = Date.now();
                 if (user && now - lastVersionTime.current > 60 * 1000) {
-                    await saveVersion(chapterId, user.uid, contentRef.current, 'auto_snapshot');
+                    await saveVersion(chapterId, user.uid, contentRef.current, 'autosave');
                     lastVersionTime.current = now;
                 }
 

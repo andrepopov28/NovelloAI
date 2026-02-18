@@ -98,7 +98,7 @@ export async function GET(req: NextRequest) {
 <body>
   <div class="title-page">
     <h1>${escapeHtml(project.title || 'Untitled')}</h1>
-    <div class="author">by Author</div>
+    <div class="author">by ${escapeHtml(project.metadata?.authorName || 'Author')}</div>
   </div>
   ${chapters
         .map(

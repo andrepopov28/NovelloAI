@@ -16,7 +16,8 @@ export interface Project {
     settings: {
         aiProvider: AIProvider;
         modelName: string;
-        temperature: number; // 🆕 0.0–2.0, default 0.7
+        temperature: number; // 0.0–2.0, default 0.7
+        includeSeriesContext: boolean; // Include synopses from other series books in context
     };
     styleProfile: { // 🆕 Computed from existing chapters
         avgSentenceLength: number;
@@ -34,6 +35,13 @@ export interface Project {
         }>;
         lastUpdated: Timestamp;
     };
+    blurb: string | null;                // AI-generated marketing blurb (from Publish)
+    metadata: {
+        authorName: string;
+        keywords: string[];
+        language: string;                  // ISO 639-1 code
+        isbn: string | null;
+    } | null;
     wordCount: number;
     chapterCount: number;
     createdAt: Timestamp;
@@ -73,7 +81,7 @@ export interface ChapterVersion { // 🆕
     userId: string;
     content: string; // Full HTML snapshot
     wordCount: number;
-    source: 'autosave' | 'manual' | 'ai-generation' | 'ai_insert' | 'auto_snapshot' | 'import';
+    source: 'autosave' | 'manual' | 'ai-generation' | 'import';
     isPinned: boolean;
     createdAt: Timestamp;
 }

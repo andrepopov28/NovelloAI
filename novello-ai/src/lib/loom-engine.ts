@@ -26,7 +26,7 @@ export class LoomEngine {
         options: LoomContextOptions = {}
     ): string {
         const {
-            maxTokens = 4000,
+            maxTokens = 2000,
             includeEntities = true,
             includeSeriesContext = true,
             currentText = '',
