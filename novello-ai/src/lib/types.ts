@@ -43,6 +43,8 @@ export interface Project {
         isbn: string | null;
     } | null;
     wordCount: number;
+    targetWordCount?: number; // Target word count for progress tracking
+    targetChapterCount?: number; // Target chapter count for progress tracking
     chapterCount: number;
     createdAt: Timestamp;
     updatedAt: Timestamp;

@@ -50,33 +50,20 @@ export default function AudiobookPage({ params }: { params: Promise<{ id: string
 
     // ── Voice Picker State ──
     const [pickerOpen, setPickerOpen] = useState(false);
-    const [pickerTab, setPickerTab] = useState<'browser' | 'elevenlabs' | 'openai'>('browser');
-    const [ttsProvider, setTtsProvider] = useState<'browser' | 'elevenlabs' | 'openai'>('browser');
+    const [pickerTab, setPickerTab] = useState<'browser'>('browser');
+    const [ttsProvider, setTtsProvider] = useState<'browser'>('browser');
     const [browserVoices, setBrowserVoices] = useState<SpeechSynthesisVoice[]>([]);
     const [selectedBrowserVoice, setSelectedBrowserVoice] = useState<string>('');
-    const [elVoices, setElVoices] = useState<{ voice_id: string; name: string; labels?: Record<string, string> }[]>([]);
-    const [selectedElVoice, setSelectedElVoice] = useState<string>('');
-    const [selectedOaiVoice, setSelectedOaiVoice] = useState<string>('alloy');
-    const [elLoading, setElLoading] = useState(false);
     const [previewingPickerVoice, setPreviewingPickerVoice] = useState<string | null>(null);
     const pickerAudioRef = useRef<HTMLAudioElement | null>(null);
 
-    const OAI_VOICES = [
-        { id: 'alloy', name: 'Alloy', desc: 'Neutral' },
-        { id: 'echo', name: 'Echo', desc: 'Warm' },
-        { id: 'fable', name: 'Fable', desc: 'British' },
-        { id: 'onyx', name: 'Onyx', desc: 'Deep' },
-        { id: 'nova', name: 'Nova', desc: 'Bright' },
-        { id: 'shimmer', name: 'Shimmer', desc: 'Soft' },
-    ];
+
 
     // Load persisted settings
     useEffect(() => {
-        const p = localStorage.getItem('novello-tts-provider') as 'browser' | 'elevenlabs' | 'openai' | null;
-        if (p) { setTtsProvider(p); setPickerTab(p); }
+        setTtsProvider('browser');
+        setPickerTab('browser');
         setSelectedBrowserVoice(localStorage.getItem('novello-tts-voice') || '');
-        setSelectedElVoice(localStorage.getItem('novello-elevenlabs-voice') || '');
-        setSelectedOaiVoice(localStorage.getItem('novello-openai-tts-voice') || 'alloy');
     }, []);
 
     // Load browser voices
@@ -90,60 +77,15 @@ export default function AudiobookPage({ params }: { params: Promise<{ id: string
         window.speechSynthesis.onvoiceschanged = load;
     }, [selectedBrowserVoice]);
 
-    // Fetch ElevenLabs voices when tab opens
-    const fetchElVoices = useCallback(async () => {
-        const key = localStorage.getItem('novello-elevenlabs-key');
-        if (!key || elVoices.length > 0) return;
-        setElLoading(true);
-        try {
-            const res = await fetch('https://api.elevenlabs.io/v1/voices', { headers: { 'xi-api-key': key } });
-            if (res.ok) { const d = await res.json(); setElVoices(d.voices || []); }
-        } catch { /* ignore */ }
-        finally { setElLoading(false); }
-    }, [elVoices.length]);
-
-    // TTS-aware speak: routes to correct provider
     const speakWithProvider = useCallback((text: string, chapterIndex: number) => {
-        const provider = ttsProvider;
-        const elKey = localStorage.getItem('novello-elevenlabs-key');
-        const oaiKey = localStorage.getItem('novello-openai-key');
-        const oaiModel = localStorage.getItem('novello-openai-tts-model') || 'tts-1-hd';
-
-        if (provider === 'elevenlabs' && elKey && selectedElVoice) {
-            // ElevenLabs streaming
-            fetch(`https://api.elevenlabs.io/v1/text-to-speech/${selectedElVoice}`, {
-                method: 'POST',
-                headers: { 'xi-api-key': elKey, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text, model_id: 'eleven_multilingual_v2', voice_settings: { stability: 0.5, similarity_boost: 0.75 } }),
-            }).then(r => r.blob()).then(blob => {
-                const url = URL.createObjectURL(blob);
-                const audio = new Audio(url);
-                audio.play();
-            }).catch(() => toast.error('ElevenLabs playback failed'));
-            return;
-        }
-
-        if (provider === 'openai' && oaiKey && selectedOaiVoice) {
-            fetch('https://api.openai.com/v1/audio/speech', {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${oaiKey}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ model: oaiModel, voice: selectedOaiVoice, input: text }),
-            }).then(r => r.blob()).then(blob => {
-                const url = URL.createObjectURL(blob);
-                const audio = new Audio(url);
-                audio.play();
-            }).catch(() => toast.error('OpenAI TTS playback failed'));
-            return;
-        }
-
         // Default: browser
         speak(text, chapterIndex);
-    }, [ttsProvider, selectedElVoice, selectedOaiVoice, speak]);
+    }, [speak]);
 
-    const selectProvider = (p: 'browser' | 'elevenlabs' | 'openai') => {
+    const selectProvider = (p: 'browser') => {
         setTtsProvider(p);
         localStorage.setItem('novello-tts-provider', p);
-        toast.success(`Voice: ${p === 'browser' ? 'Browser' : p === 'elevenlabs' ? 'ElevenLabs' : 'OpenAI'}`);
+        toast.success(`Voice: Browser`);
     };
 
     const previewBrowserVoice = (voiceName: string) => {
@@ -158,11 +100,7 @@ export default function AudiobookPage({ params }: { params: Promise<{ id: string
         window.speechSynthesis.speak(utt);
     };
 
-    const activeVoiceLabel = ttsProvider === 'browser'
-        ? (selectedBrowserVoice || 'Browser Voice')
-        : ttsProvider === 'elevenlabs'
-            ? (elVoices.find(v => v.voice_id === selectedElVoice)?.name || 'ElevenLabs')
-            : `OpenAI · ${selectedOaiVoice}`;
+    const activeVoiceLabel = selectedBrowserVoice || 'Browser Voice';
 
     const handleInstallVoice = (voiceId: string) => {
         setInstalledVoiceIds(prev => [...prev, voiceId]);
@@ -370,7 +308,7 @@ export default function AudiobookPage({ params }: { params: Promise<{ id: string
                                     <Mic2 size={14} />
                                     <button
                                         className="ab-voice-picker-btn"
-                                        onClick={() => { setPickerOpen(true); if (pickerTab === 'elevenlabs') fetchElVoices(); }}
+                                        onClick={() => setPickerOpen(true)}
                                     >
                                         <span className="ab-voice-picker-label">{activeVoiceLabel}</span>
                                         <ChevronDown size={13} />
@@ -964,27 +902,27 @@ export default function AudiobookPage({ params }: { params: Promise<{ id: string
 
                         {/* Provider selector */}
                         <div className="vp-provider-row">
-                            {(['browser', 'elevenlabs', 'openai'] as const).map(p => (
+                            {(['browser'] as const).map(p => (
                                 <button
                                     key={p}
                                     className={`vp-provider-btn ${ttsProvider === p ? 'vp-provider-active' : ''}`}
                                     onClick={() => selectProvider(p)}
                                 >
                                     {ttsProvider === p && <Check size={12} />}
-                                    {p === 'browser' ? '🌐 Browser' : p === 'elevenlabs' ? '⚡ ElevenLabs' : '✦ OpenAI'}
+                                    {'🌐 Browser'}
                                 </button>
                             ))}
                         </div>
 
                         {/* Tabs */}
                         <div className="vp-tabs">
-                            {(['browser', 'elevenlabs', 'openai'] as const).map(t => (
+                            {(['browser'] as const).map(t => (
                                 <button
                                     key={t}
                                     className={`vp-tab ${pickerTab === t ? 'vp-tab-active' : ''}`}
-                                    onClick={() => { setPickerTab(t); if (t === 'elevenlabs') fetchElVoices(); }}
+                                    onClick={() => setPickerTab(t)}
                                 >
-                                    {t === 'browser' ? 'Browser' : t === 'elevenlabs' ? 'ElevenLabs' : 'OpenAI TTS'}
+                                    {'Browser'}
                                     {ttsProvider === t && <span className="vp-tab-dot" />}
                                 </button>
                             ))}
@@ -1024,62 +962,6 @@ export default function AudiobookPage({ params }: { params: Promise<{ id: string
                                                 </button>
                                             </div>
                                         </div>
-                                    ))}
-                                </div>
-                            )}
-
-                            {/* ElevenLabs Tab */}
-                            {pickerTab === 'elevenlabs' && (
-                                <div className="vp-voice-list">
-                                    {!localStorage.getItem('novello-elevenlabs-key') && (
-                                        <div className="vp-no-key">
-                                            <Settings2 size={20} />
-                                            <p>Add your ElevenLabs API key in <strong>Settings → AI & Models</strong> or <strong>Settings → Voice & TTS</strong>.</p>
-                                        </div>
-                                    )}
-                                    {elLoading && <p className="vp-empty"><Loader2 size={16} className="animate-spin" /> Loading voices...</p>}
-                                    {!elLoading && elVoices.map(v => (
-                                        <div
-                                            key={v.voice_id}
-                                            className={`vp-voice-row ${selectedElVoice === v.voice_id ? 'vp-voice-selected' : ''}`}
-                                            onClick={() => { setSelectedElVoice(v.voice_id); localStorage.setItem('novello-elevenlabs-voice', v.voice_id); }}
-                                        >
-                                            <div className="vp-voice-left">
-                                                <div className={`vp-radio ${selectedElVoice === v.voice_id ? 'vp-radio-on' : ''}`}>
-                                                    {selectedElVoice === v.voice_id && <Check size={10} />}
-                                                </div>
-                                                <div className="vp-voice-info">
-                                                    <span className="vp-voice-name">{v.name}</span>
-                                                    <span className="vp-voice-lang">{v.labels?.accent || 'en'}</span>
-                                                </div>
-                                            </div>
-                                            <span className="vp-badge" style={{ color: '#8b5cf6', background: 'rgba(139,92,246,0.12)' }}>ElevenLabs</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-
-                            {/* OpenAI Tab */}
-                            {pickerTab === 'openai' && (
-                                <div className="vp-oai-grid">
-                                    {!localStorage.getItem('novello-openai-key') && (
-                                        <div className="vp-no-key" style={{ gridColumn: '1/-1' }}>
-                                            <Settings2 size={20} />
-                                            <p>Add your OpenAI API key in <strong>Settings → AI & Models</strong> or <strong>Settings → Voice & TTS</strong>.</p>
-                                        </div>
-                                    )}
-                                    {OAI_VOICES.map(v => (
-                                        <button
-                                            key={v.id}
-                                            className={`vp-oai-card ${selectedOaiVoice === v.id ? 'vp-oai-active' : ''}`}
-                                            onClick={() => { setSelectedOaiVoice(v.id); localStorage.setItem('novello-openai-tts-voice', v.id); }}
-                                        >
-                                            <div className="vp-oai-top">
-                                                <span className="vp-oai-name">{v.name}</span>
-                                                {selectedOaiVoice === v.id && <Check size={12} style={{ color: 'var(--accent-warm)' }} />}
-                                            </div>
-                                            <span className="vp-oai-desc">{v.desc}</span>
-                                        </button>
                                     ))}
                                 </div>
                             )}

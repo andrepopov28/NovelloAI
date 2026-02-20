@@ -137,6 +137,8 @@ export async function markChapterSynced(chapterId: string): Promise<void> {
     }
 }
 
+import { updateChapter } from './firestore';
+
 /**
  * Sync all unsynced chapters to Firestore
  */
@@ -147,24 +149,12 @@ export async function syncOfflineChanges(): Promise<{ success: number; failed: n
 
     for (const chapter of chapters) {
         try {
-            // Call the API to save to Firestore
-            const response = await fetch(`/api/chapters/${chapter.id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    content: chapter.content,
-                    contentJSON: chapter.contentJSON,
-                    wordCount: chapter.wordCount,
-                    updatedAtClient: chapter.savedAt,
-                }),
+            await updateChapter(chapter.id, {
+                content: chapter.content,
+                wordCount: chapter.wordCount,
             });
-
-            if (response.ok) {
-                await markChapterSynced(chapter.id);
-                success++;
-            } else {
-                failed++;
-            }
+            await markChapterSynced(chapter.id);
+            success++;
         } catch (error) {
             console.error(`Failed to sync chapter ${chapter.id}:`, error);
             failed++;

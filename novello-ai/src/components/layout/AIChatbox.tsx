@@ -6,6 +6,8 @@ import { useChat, ChatMessage } from '@/lib/hooks/useChat';
 import { useVoiceInteraction } from '@/lib/hooks/useVoiceInteraction';
 import { usePathname } from 'next/navigation';
 import Image from 'next/image';
+import { useTheme } from '@/lib/hooks/useTheme';
+import type { Theme } from '@/lib/hooks/useTheme';
 
 // ─── Persona Definitions ──────────────────────
 interface Persona {
@@ -99,6 +101,24 @@ const personas: Record<string, Persona> = {
     },
 };
 
+// ─── Theme-aware avatar mapping ──────────────────
+// Maps each theme to a photorealistic portrait that matches the aesthetic.
+// Light/minimal themes get the bright editorial portrait;
+// dark/moody themes get the cinematic portrait.
+const THEME_AVATARS: Partial<Record<Theme, string>> = {
+    light: '/images/personas/default-light.png',
+    swiss: '/images/personas/default-light.png',
+    eink: '/images/personas/default-light.png',
+    cupertino: '/images/personas/default-light.png',
+    editorial: '/images/personas/default-light.png',
+    dark: '/images/personas/default-dark.png',
+    academia: '/images/personas/default-dark.png',
+};
+
+function getThemeAvatar(theme: Theme, personaAvatar: string): string {
+    return THEME_AVATARS[theme] ?? personaAvatar;
+}
+
 function getPersonaFromPath(pathname: string): Persona {
     if (pathname.includes('/brainstorm')) return personas.brainstorm;
     if (pathname.includes('/codex')) return personas.codex;
@@ -128,6 +148,8 @@ export function AIChatbox() {
     const prevMsgCountRef = useRef(0);
 
     const persona = getPersonaFromPath(pathname);
+    const { theme } = useTheme();
+    const themeAvatar = getThemeAvatar(theme, persona.avatar);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -191,7 +213,7 @@ export function AIChatbox() {
                     title={`Ask ${persona.name}`}
                 >
                     <Image
-                        src={persona.avatar}
+                        src={themeAvatar}
                         alt={persona.name}
                         width={52}
                         height={52}
@@ -253,7 +275,7 @@ export function AIChatbox() {
                 <>
                     <div className="chatbox-minimized">
                         <div className="minimized-left">
-                            <Image src={persona.avatar} alt={persona.name} width={28} height={28} className="minimized-avatar" />
+                            <Image src={themeAvatar} alt={persona.name} width={28} height={28} className="minimized-avatar" />
                             <span className="minimized-name">{persona.name}</span>
                         </div>
                         <div className="minimized-actions">
@@ -347,7 +369,7 @@ export function AIChatbox() {
                             {/* Full-width Photorealistic Persona Banner */}
                             <div className="banner-hero-wrap">
                                 <Image
-                                    src={persona.avatar}
+                                    src={themeAvatar}
                                     alt={persona.name}
                                     fill
                                     className="object-cover transition-all duration-500"
@@ -496,7 +518,7 @@ export function AIChatbox() {
                     position: fixed;
                     top: var(--nav-height);
                     right: 0;
-                    bottom: 0;
+                    bottom: var(--ledger-height, 40vh);
                     width: var(--chatbox-width);
                     z-index: 99;
                     display: flex;

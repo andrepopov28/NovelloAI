@@ -132,7 +132,7 @@ export function GlobalNav() {
             {/* Brand — Left */}
             <div className="flex-none flex items-center">
                 <Link href="/app" className="flex items-center no-underline">
-                    <div className="h-[42px] w-auto flex items-center">
+                    <div className="h-[50px] w-auto flex items-center">
                         <NovelloLogo />
                     </div>
                 </Link>

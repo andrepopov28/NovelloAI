@@ -45,7 +45,7 @@ export function useProjects() {
     }, [user]);
 
     const createProject = useCallback(
-        async (data: { title: string; genre: string; synopsis: string }) => {
+        async (data: { title: string; genre: string; synopsis: string; targetWordCount?: number; targetChapterCount?: number }) => {
             if (!user) throw new Error('Not authenticated');
             const id = await fbCreateProject(user.uid, data);
             toast.success('Project created!');

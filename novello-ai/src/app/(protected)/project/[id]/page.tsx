@@ -92,7 +92,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
     const handleExportPdf = useCallback(async () => {
         try {
-            toast.info('Generating PDF export…');
+            toast.info('Generating HTML for PDF print…');
             const token = await user?.getIdToken();
             const res = await fetch(`/api/export/pdf?projectId=${projectId}`, {
                 headers: {
@@ -351,7 +351,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
                         <Button variant="secondary" onClick={handleExportPdf} disabled={chapters.length === 0}>
                             <Download size={14} />
-                            PDF
+                            Print to PDF (HTML)
                         </Button>
                         <Button variant="secondary" onClick={handleExportEpub} disabled={chapters.length === 0}>
                             <Download size={14} />

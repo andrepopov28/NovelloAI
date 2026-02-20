@@ -6,6 +6,8 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { ThemeProvider } from '@/lib/hooks/useTheme';
 import { GlobalNav } from '@/components/layout/GlobalNav';
 import { AIChatbox } from '@/components/layout/AIChatbox';
+import { ProjectLedger } from '@/components/layout/ProjectLedger';
+import { ActiveProjectProvider } from '@/lib/context/ActiveProjectContext';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 export default function ProtectedLayout({ children }: { children: React.ReactNode }) {
@@ -57,20 +59,23 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
 
     return (
         <ThemeProvider>
-            <ErrorBoundary>
-                <GlobalNav />
-                <main style={{
-                    paddingTop: '80px', // Matches global-nav height (updated from 64px)
-                    paddingRight: 'var(--chatbox-width)', // Prevent content overlapping the fixed chatbox
-                    minHeight: '100vh',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    position: 'relative',
-                }}>
-                    {children}
-                </main>
-                <AIChatbox />
-            </ErrorBoundary>
+            <ActiveProjectProvider>
+                <ErrorBoundary>
+                    <GlobalNav />
+                    <main style={{
+                        paddingTop: '80px', // Matches global-nav height (updated from 64px)
+                        paddingRight: 'var(--chatbox-width)', // Prevent content overlapping the fixed chatbox
+                        minHeight: '100vh',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        position: 'relative',
+                    }}>
+                        {children}
+                    </main>
+                    <AIChatbox />
+                    <ProjectLedger />
+                </ErrorBoundary>
+            </ActiveProjectProvider>
         </ThemeProvider>
     );
 }

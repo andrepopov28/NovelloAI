@@ -32,7 +32,7 @@ const docRef = (colName: string, id: string) => doc(getFirebaseDb(), colName, id
 
 export async function createProject(
     userId: string,
-    data: { title: string; genre: string; synopsis: string }
+    data: { title: string; genre: string; synopsis: string; targetWordCount?: number; targetChapterCount?: number }
 ): Promise<string> {
     const docRef = await addDoc(projectsCol(), {
         userId,
@@ -43,6 +43,8 @@ export async function createProject(
         blurb: null,
         metadata: null,
         wordCount: 0,
+        targetWordCount: data.targetWordCount ?? 80000,
+        targetChapterCount: data.targetChapterCount ?? 0,
         chapterCount: 0,
         coverImage: '',
         settings: {

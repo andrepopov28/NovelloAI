@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/Button';
 import { toast } from 'sonner';
 
 /* ─── Types ──────────────────────────── */
-type TtsProvider = 'browser' | 'elevenlabs' | 'openai';
+type TtsProvider = 'browser';
 
 interface BrowserVoice {
     name: string;
@@ -26,15 +26,6 @@ interface BrowserVoice {
     isEnhanced: boolean;
     voiceObj: SpeechSynthesisVoice;
 }
-
-const OPENAI_VOICES = [
-    { id: 'alloy', name: 'Alloy', desc: 'Neutral, balanced' },
-    { id: 'echo', name: 'Echo', desc: 'Warm, conversational' },
-    { id: 'fable', name: 'Fable', desc: 'British, expressive' },
-    { id: 'onyx', name: 'Onyx', desc: 'Deep, authoritative' },
-    { id: 'nova', name: 'Nova', desc: 'Bright, energetic' },
-    { id: 'shimmer', name: 'Shimmer', desc: 'Soft, gentle' },
-];
 
 const PREVIEW_TEXT = 'This is a preview of my voice. I hope you enjoy listening to your story.';
 
@@ -47,38 +38,13 @@ export default function VoiceSettingsPage() {
     const [selectedBrowserVoice, setSelectedBrowserVoice] = useState<string>('');
     const [previewingVoice, setPreviewingVoice] = useState<string | null>(null);
 
-    // ElevenLabs
-    const [elKey, setElKey] = useState('');
-    const [elKeySaved, setElKeySaved] = useState(false);
-    const [elVoices, setElVoices] = useState<{ voice_id: string; name: string; labels?: Record<string, string> }[]>([]);
-    const [elLoading, setElLoading] = useState(false);
-    const [selectedElVoice, setSelectedElVoice] = useState('');
-
-    // OpenAI TTS
-    const [oaiKey, setOaiKey] = useState('');
-    const [oaiKeySaved, setOaiKeySaved] = useState(false);
-    const [selectedOaiVoice, setSelectedOaiVoice] = useState('alloy');
-    const [oaiModel, setOaiModel] = useState<'tts-1' | 'tts-1-hd'>('tts-1-hd');
-    const [oaiPreviewing, setOaiPreviewing] = useState(false);
-
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
     // Load from localStorage
     useEffect(() => {
-        const provider = (localStorage.getItem('novello-tts-provider') as TtsProvider) || 'browser';
-        setActiveProvider(provider);
-        setActiveTab(provider);
+        setActiveProvider('browser');
+        setActiveTab('browser');
         setSelectedBrowserVoice(localStorage.getItem('novello-tts-voice') || '');
-        setSelectedElVoice(localStorage.getItem('novello-elevenlabs-voice') || '');
-        setSelectedOaiVoice(localStorage.getItem('novello-openai-tts-voice') || 'alloy');
-        setOaiModel((localStorage.getItem('novello-openai-tts-model') as 'tts-1' | 'tts-1-hd') || 'tts-1-hd');
-
-        const savedElKey = localStorage.getItem('novello-elevenlabs-key') || '';
-        const savedOaiKey = localStorage.getItem('novello-openai-key') || '';
-        setElKey(savedElKey);
-        setOaiKey(savedOaiKey);
-        if (savedElKey) setElKeySaved(true);
-        if (savedOaiKey) setOaiKeySaved(true);
     }, []);
 
     // Load browser voices
@@ -108,41 +74,10 @@ export default function VoiceSettingsPage() {
         window.speechSynthesis.onvoiceschanged = loadVoices;
     }, [selectedBrowserVoice]);
 
-    // Fetch ElevenLabs voices
-    const fetchElVoices = useCallback(async (key: string) => {
-        if (!key) return;
-        setElLoading(true);
-        try {
-            const res = await fetch('https://api.elevenlabs.io/v1/voices', {
-                headers: { 'xi-api-key': key },
-            });
-            if (!res.ok) throw new Error('Invalid key');
-            const data = await res.json();
-            setElVoices(data.voices || []);
-            toast.success(`${(data.voices || []).length} ElevenLabs voices loaded`);
-        } catch {
-            toast.error('Could not load ElevenLabs voices — check your API key');
-        } finally {
-            setElLoading(false);
-        }
-    }, []);
-
-    const saveElKey = () => {
-        localStorage.setItem('novello-elevenlabs-key', elKey);
-        setElKeySaved(true);
-        fetchElVoices(elKey);
-    };
-
-    const saveOaiKey = () => {
-        localStorage.setItem('novello-openai-key', oaiKey);
-        setOaiKeySaved(true);
-        toast.success('OpenAI key saved');
-    };
-
     const selectProvider = (p: TtsProvider) => {
         setActiveProvider(p);
         localStorage.setItem('novello-tts-provider', p);
-        toast.success(`Active TTS provider: ${p === 'browser' ? 'Browser' : p === 'elevenlabs' ? 'ElevenLabs' : 'OpenAI'}`);
+        toast.success(`Active TTS provider: Browser`);
     };
 
     // Browser voice preview
@@ -165,46 +100,6 @@ export default function VoiceSettingsPage() {
         localStorage.setItem('novello-tts-voice', name);
     };
 
-    // OpenAI TTS preview
-    const previewOaiVoice = async (voiceId: string) => {
-        if (!oaiKey) { toast.error('Save your OpenAI key first'); return; }
-        if (oaiPreviewing) {
-            audioRef.current?.pause();
-            setOaiPreviewing(false);
-            return;
-        }
-        setOaiPreviewing(true);
-        try {
-            const res = await fetch('https://api.openai.com/v1/audio/speech', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${oaiKey}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ model: oaiModel, voice: voiceId, input: PREVIEW_TEXT }),
-            });
-            if (!res.ok) throw new Error('API error');
-            const blob = await res.blob();
-            const url = URL.createObjectURL(blob);
-            const audio = new Audio(url);
-            audioRef.current = audio;
-            audio.onended = () => setOaiPreviewing(false);
-            audio.play();
-        } catch {
-            toast.error('Preview failed — check your OpenAI key');
-            setOaiPreviewing(false);
-        }
-    };
-
-    const selectOaiVoice = (id: string) => {
-        setSelectedOaiVoice(id);
-        localStorage.setItem('novello-openai-tts-voice', id);
-    };
-
-    const selectOaiModel = (m: 'tts-1' | 'tts-1-hd') => {
-        setOaiModel(m);
-        localStorage.setItem('novello-openai-tts-model', m);
-    };
 
     const enhancedVoices = browserVoices.filter(v => v.isEnhanced);
     const standardVoices = browserVoices.filter(v => !v.isEnhanced);
@@ -228,14 +123,14 @@ export default function VoiceSettingsPage() {
                     <span>Active TTS Provider</span>
                 </div>
                 <div className="vc-provider-toggle">
-                    {(['browser', 'elevenlabs', 'openai'] as TtsProvider[]).map(p => (
+                    {(['browser'] as TtsProvider[]).map(p => (
                         <button
                             key={p}
                             className={`vc-provider-opt ${activeProvider === p ? 'vc-provider-active' : ''}`}
                             onClick={() => selectProvider(p)}
                         >
                             {activeProvider === p && <Check size={13} />}
-                            <span>{p === 'browser' ? '🌐 Browser' : p === 'elevenlabs' ? '⚡ ElevenLabs' : '✦ OpenAI'}</span>
+                            <span>{'🌐 Browser'}</span>
                         </button>
                     ))}
                 </div>
@@ -243,13 +138,13 @@ export default function VoiceSettingsPage() {
 
             {/* Tabs */}
             <div className="vc-tabs">
-                {(['browser', 'elevenlabs', 'openai'] as TtsProvider[]).map(t => (
+                {(['browser'] as TtsProvider[]).map(t => (
                     <button
                         key={t}
                         className={`vc-tab ${activeTab === t ? 'vc-tab-active' : ''}`}
                         onClick={() => setActiveTab(t)}
                     >
-                        {t === 'browser' ? 'Browser Voices' : t === 'elevenlabs' ? 'ElevenLabs' : 'OpenAI TTS'}
+                        {'Browser Voices'}
                         {activeProvider === t && <span className="vc-tab-dot" />}
                     </button>
                 ))}
@@ -312,128 +207,6 @@ export default function VoiceSettingsPage() {
                             <span>Loading voices...</span>
                         </div>
                     )}
-                </div>
-            )}
-
-            {/* ── ElevenLabs Tab ── */}
-            {activeTab === 'elevenlabs' && (
-                <div className="vc-section">
-                    <Card className="vc-api-card">
-                        <div className="vc-api-header">
-                            <div>
-                                <h3 className="vc-api-title">ElevenLabs API Key</h3>
-                                <p className="vc-api-desc">Get your key at <a href="https://elevenlabs.io" target="_blank" rel="noopener noreferrer" className="vc-link">elevenlabs.io</a></p>
-                            </div>
-                            {elKeySaved && <span className="vc-saved-badge"><Check size={11} /> Saved</span>}
-                        </div>
-                        <div className="vc-key-row">
-                            <input
-                                type="password"
-                                value={elKey}
-                                onChange={e => setElKey(e.target.value)}
-                                placeholder="sk-..."
-                                className="vc-key-input"
-                            />
-                            <Button onClick={saveElKey} disabled={!elKey.trim()}>
-                                {elLoading ? <Loader2 size={14} className="animate-spin" /> : 'Save & Load'}
-                            </Button>
-                        </div>
-                    </Card>
-
-                    {elLoading && (
-                        <div className="vc-empty"><Loader2 size={18} className="animate-spin" /><span>Loading voices...</span></div>
-                    )}
-
-                    {!elLoading && elVoices.length > 0 && (
-                        <div className="vc-voice-group">
-                            <div className="vc-group-label"><Sparkles size={12} /><span>Available Voices ({elVoices.length})</span></div>
-                            {elVoices.map(v => (
-                                <VoiceRow
-                                    key={v.voice_id}
-                                    name={v.name}
-                                    lang={v.labels?.accent || 'en'}
-                                    badge="ElevenLabs"
-                                    badgeColor="#8b5cf6"
-                                    isSelected={selectedElVoice === v.voice_id}
-                                    isPreviewing={false}
-                                    onSelect={() => {
-                                        setSelectedElVoice(v.voice_id);
-                                        localStorage.setItem('novello-elevenlabs-voice', v.voice_id);
-                                    }}
-                                    onPreview={() => toast.info('ElevenLabs preview uses your quota — select a voice to use it')}
-                                />
-                            ))}
-                        </div>
-                    )}
-
-                    {!elLoading && elVoices.length === 0 && elKeySaved && (
-                        <div className="vc-empty"><AlertCircle size={18} /><span>No voices loaded. Check your API key.</span></div>
-                    )}
-                </div>
-            )}
-
-            {/* ── OpenAI Tab ── */}
-            {activeTab === 'openai' && (
-                <div className="vc-section">
-                    <Card className="vc-api-card">
-                        <div className="vc-api-header">
-                            <div>
-                                <h3 className="vc-api-title">OpenAI API Key</h3>
-                                <p className="vc-api-desc">Get your key at <a href="https://platform.openai.com" target="_blank" rel="noopener noreferrer" className="vc-link">platform.openai.com</a></p>
-                            </div>
-                            {oaiKeySaved && <span className="vc-saved-badge"><Check size={11} /> Saved</span>}
-                        </div>
-                        <div className="vc-key-row">
-                            <input
-                                type="password"
-                                value={oaiKey}
-                                onChange={e => setOaiKey(e.target.value)}
-                                placeholder="sk-..."
-                                className="vc-key-input"
-                            />
-                            <Button onClick={saveOaiKey} disabled={!oaiKey.trim()}>Save</Button>
-                        </div>
-                    </Card>
-
-                    {/* Model selector */}
-                    <div className="vc-model-row">
-                        <span className="vc-group-label-text">Model Quality</span>
-                        <div className="vc-model-toggle">
-                            <button className={`vc-model-opt ${oaiModel === 'tts-1' ? 'vc-model-active' : ''}`} onClick={() => selectOaiModel('tts-1')}>
-                                tts-1 <span className="vc-model-sub">Fast</span>
-                            </button>
-                            <button className={`vc-model-opt ${oaiModel === 'tts-1-hd' ? 'vc-model-active' : ''}`} onClick={() => selectOaiModel('tts-1-hd')}>
-                                tts-1-hd <span className="vc-model-sub">High Quality</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Voice grid */}
-                    <div className="vc-voice-group">
-                        <div className="vc-group-label"><Sparkles size={12} /><span>Voices</span></div>
-                        <div className="vc-oai-grid">
-                            {OPENAI_VOICES.map(v => (
-                                <button
-                                    key={v.id}
-                                    className={`vc-oai-card ${selectedOaiVoice === v.id ? 'vc-oai-active' : ''}`}
-                                    onClick={() => selectOaiVoice(v.id)}
-                                >
-                                    <div className="vc-oai-card-top">
-                                        <span className="vc-oai-name">{v.name}</span>
-                                        {selectedOaiVoice === v.id && <Check size={13} className="vc-oai-check" />}
-                                    </div>
-                                    <span className="vc-oai-desc">{v.desc}</span>
-                                    <button
-                                        className="vc-oai-preview"
-                                        onClick={e => { e.stopPropagation(); previewOaiVoice(v.id); }}
-                                    >
-                                        {oaiPreviewing && selectedOaiVoice === v.id ? <Square size={10} /> : <Play size={10} />}
-                                        Preview
-                                    </button>
-                                </button>
-                            ))}
-                        </div>
-                    </div>
                 </div>
             )}
 
