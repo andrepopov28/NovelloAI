@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  # Redis for BullMQ Queues in UAT
+  redis-uat:
+    image: redis:alpine
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Firebase Emulators (Auth, Firestore, Storage, Functions)
+  firebase-emulators:
+    image: spine3/firebase-emulator:latest # A lightweight, commonly used community emulator image or we can rely on local CLI
+    # To run completely locally without a massive docker image, it's often better to just run the CLI `firebase emulators:start` 
+    # But as per requirements to "include firebase emulator suite in docker-compose":
+    ports:
+      - "4000:4000" # UI
+      - "8080:8080" # Firestore
+      - "9099:9099" # Auth
+      - "9199:9199" # Storage
+      - "5001:5001" # Functions
+    environment:
+      - PROJECT_ID=demo-uat-project
+    volumes:
+      - ./uat/firebase-data:/opt/workspace/firebase-data
+
+  # AudioBook Worker
+  audiobook-worker-uat:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker # Assuming we have or will create a minimal worker Dockerfile
+    command: [ "npx", "tsx", "src/workers/audiobookWorker.ts" ]
+    environment:
+      - REDIS_HOST=redis-uat
+      - REDIS_PORT=6379
+      - FIRESTORE_EMULATOR_HOST=firebase-emulators:8080
+      - FIREBASE_STORAGE_EMULATOR_HOST=firebase-emulators:9199
+      - NEXT_PUBLIC_FIREBASE_PROJECT_ID=demo-uat-project
+      - GCLOUD_PROJECT=demo-uat-project
+      - UAT_MODE=true
+    volumes:
+      - ./src:/app/src
+      - ./uat:/app/uat
+    depends_on:
+      redis-uat:
+        condition: service_healthy
+
+  # Voice Clone Worker
+  voice-clone-worker-uat:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    command: [ "npx", "tsx", "src/workers/voiceCloneWorker.ts" ]
+    environment:
+      - REDIS_HOST=redis-uat
+      - REDIS_PORT=6379
+      - FIRESTORE_EMULATOR_HOST=firebase-emulators:8080
+      - FIREBASE_STORAGE_EMULATOR_HOST=firebase-emulators:9199
+      - NEXT_PUBLIC_FIREBASE_PROJECT_ID=demo-uat-project
+      - GCLOUD_PROJECT=demo-uat-project
+      - UAT_MODE=true
+    depends_on:
+      redis-uat:
+        condition: service_healthy
+
+  # Next.js Application
+  next-app-uat:
+    build:
+      context: .
+      dockerfile: Dockerfile.app # We will use the standard dev/prod image
+    ports:
+      - "3001:3000"
+    environment:
+      - REDIS_HOST=redis-uat
+      - REDIS_PORT=6379
+      - FIRESTORE_EMULATOR_HOST=firebase-emulators:8080
+      - FIREBASE_AUTH_EMULATOR_HOST=firebase-emulators:9099
+      - FIREBASE_STORAGE_EMULATOR_HOST=firebase-emulators:9199
+      - NEXT_PUBLIC_FIREBASE_PROJECT_ID=demo-uat-project
+      - GCLOUD_PROJECT=demo-uat-project
+      - UAT_MODE=true
+      - NEXT_PUBLIC_OLLAMA_URL=http://host.docker.internal:11434 # Route to host Ollama
+    volumes:
+      - ./src:/app/src
+      - ./public:/app/public
+      - ./uat:/app/uat
+    depends_on:
+      - firebase-emulators
+      - redis-uat

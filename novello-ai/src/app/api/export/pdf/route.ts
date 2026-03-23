@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getFirebaseDb } from '@/lib/firebase';
-import { collection, getDocs, query, where, doc, getDoc } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, getDoc } from '@/lib/firebase';
 import type { Project, Chapter } from '@/lib/types';
 import { verifyIdToken } from '@/lib/firebase-admin';
 
@@ -13,7 +13,7 @@ import { verifyIdToken } from '@/lib/firebase-admin';
 export async function GET(req: NextRequest) {
   try {
     const authHeader = req.headers.get('Authorization');
-    await verifyIdToken(authHeader);
+    const decoded = await verifyIdToken(authHeader);
 
     const { searchParams } = new URL(req.url);
     const projectId = searchParams.get('projectId');
@@ -30,6 +30,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Project not found' }, { status: 404 });
     }
     const project = { id: projectSnap.id, ...projectSnap.data() } as Project;
+
+    // ── Ownership check ───────────────────────────────────────────────────
+    if ((project as any).userId !== decoded.uid) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     // Fetch chapters (client-side sort to avoid index requirement)
     const chaptersSnap = await getDocs(
@@ -54,7 +59,23 @@ export async function GET(req: NextRequest) {
 <meta charset="utf-8">
 <title>${escapeHtml(project.title || 'Untitled')}</title>
 <style>
-  @page { margin: 1in; size: letter; }
+  @page {
+    margin: 1in;
+    size: letter;
+    @bottom-center {
+      content: counter(page) ' of ' counter(pages);
+      font-family: 'Georgia', 'Times New Roman', serif;
+      font-size: 10pt;
+      color: #555;
+    }
+    @top-center {
+      content: string(book-title);
+      font-family: 'Georgia', 'Times New Roman', serif;
+      font-size: 9pt;
+      color: #888;
+      letter-spacing: 0.05em;
+    }
+  }
   body {
     font-family: 'Georgia', 'Times New Roman', serif;
     font-size: 12pt;
@@ -73,6 +94,7 @@ export async function GET(req: NextRequest) {
     font-size: 28pt;
     font-weight: bold;
     margin-bottom: 0.5in;
+    string-set: book-title content(text);
   }
   .title-page .author {
     font-size: 16pt;
@@ -105,7 +127,7 @@ export async function GET(req: NextRequest) {
           (ch) => `
   <div class="chapter">
     <h2>${escapeHtml(ch.title)}</h2>
-    <div class="chapter-content">${ch.content || '<p>(Empty chapter)</p>'}</div>
+    <div class="chapter-content">${escapeHtml(ch.content || '<p>(Empty chapter)</p>')}</div>
   </div>`
         )
         .join('\n')}

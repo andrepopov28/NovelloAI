@@ -2,12 +2,14 @@
 
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import { X, Send, Trash2, StopCircle, Mic, Headphones, Upload, Minimize2, Maximize2, Volume2, VolumeX } from 'lucide-react';
+import './AIChatbox.css';
 import { useChat, ChatMessage } from '@/lib/hooks/useChat';
 import { useVoiceInteraction } from '@/lib/hooks/useVoiceInteraction';
 import { usePathname } from 'next/navigation';
 import Image from 'next/image';
 import { useTheme } from '@/lib/hooks/useTheme';
 import type { Theme } from '@/lib/hooks/useTheme';
+import { usePersonas } from '@/lib/hooks/usePersonas';
 
 // ─── Persona Definitions ──────────────────────
 interface Persona {
@@ -103,16 +105,10 @@ const personas: Record<string, Persona> = {
 
 // ─── Theme-aware avatar mapping ──────────────────
 // Maps each theme to a photorealistic portrait that matches the aesthetic.
-// Light/minimal themes get the bright editorial portrait;
-// dark/moody themes get the cinematic portrait.
-const THEME_AVATARS: Partial<Record<Theme, string>> = {
-    light: '/images/personas/default-light.png',
-    swiss: '/images/personas/default-light.png',
-    eink: '/images/personas/default-light.png',
-    cupertino: '/images/personas/default-light.png',
-    editorial: '/images/personas/default-light.png',
-    dark: '/images/personas/default-dark.png',
-    academia: '/images/personas/default-dark.png',
+const THEME_AVATARS: Record<Theme, string> = {
+    play: '/images/avatars/play/stylist.webp',
+    global: '/images/avatars/global/stylist.webp',
+    futuro: '/images/avatars/futuro/stylist.webp',
 };
 
 function getThemeAvatar(theme: Theme, personaAvatar: string): string {
@@ -132,24 +128,64 @@ function getPersonaFromPath(pathname: string): Persona {
 
 export function AIChatbox() {
     const pathname = usePathname();
-    const [isOpen, setIsOpen] = useState(true); // Open by default
+    // Restore isOpen preference from localStorage on mount
+    const [isOpen, setIsOpen] = useState(true);
     const [isMinimized, setIsMinimized] = useState(false);
     const [input, setInput] = useState('');
     const [liveConvoMode, setLiveConvoMode] = useState(false);
+    // Provider label shown in banner — read from localStorage on mount to avoid SSR mismatch
+    const [resolvedProvider, setResolvedProvider] = useState<string>('OLLAMA');
 
     // Extract projectId from path /project/[id]
     const projectMatch = pathname.match(/\/project\/([^/]+)/);
     const projectId = projectMatch ? projectMatch[1] : undefined;
 
-    const { messages, isStreaming, sendMessage, cancelStream, clearMessages } = useChat(projectId);
+    // Get base persona definition from path
+    const basePersona = getPersonaFromPath(pathname);
+
+    // Fetch user remote persona custom settings
+    const { getPersona } = usePersonas();
+    const personaSettings = getPersona(basePersona.key);
+
+    const { messages, isStreaming, sendMessage, cancelStream, clearMessages } = useChat({
+        projectId,
+        personaId: basePersona.key,
+        systemPrompt: personaSettings.personality,
+        provider: personaSettings.provider,
+        model: personaSettings.model,
+    });
+
     const voice = useVoiceInteraction();
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const prevMsgCountRef = useRef(0);
 
-    const persona = getPersonaFromPath(pathname);
+    // Hydration-safe: read localStorage only on the client after mount
+    useEffect(() => {
+        const saved = localStorage.getItem('novello-chatbox-open');
+        if (saved !== null) {
+            setIsOpen(saved === 'true');
+        }
+        // Resolve provider label for banner
+        const settings = localStorage.getItem('novello-settings');
+        if (settings) {
+            try {
+                const parsed = JSON.parse(settings);
+                setResolvedProvider((parsed.provider || 'ollama').toUpperCase());
+            } catch { /* ignore */ }
+        }
+    }, []);
+
+    // Persist chatbox open/close preference
+    const handleSetIsOpen = (value: boolean) => {
+        setIsOpen(value);
+        localStorage.setItem('novello-chatbox-open', String(value));
+    };
+
     const { theme } = useTheme();
-    const themeAvatar = getThemeAvatar(theme, persona.avatar);
+    // Use base avatar since we haven't implemented avatar uploads for agents yet
+    const themeAvatar = getThemeAvatar(theme, basePersona.avatar);
+    const displayName = personaSettings.name || basePersona.name;
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -165,7 +201,7 @@ export function AIChatbox() {
         if (messages.length > prevMsgCountRef.current) {
             const latestMsg = messages[messages.length - 1];
             if (latestMsg?.role === 'assistant' && latestMsg.content && !isStreaming) {
-                voice.speakText(latestMsg.content);
+                voice.speakText(latestMsg.content, personaSettings.voiceId || undefined);
             }
         }
         prevMsgCountRef.current = messages.length;
@@ -208,62 +244,19 @@ export function AIChatbox() {
         return (
             <>
                 <button
-                    onClick={() => setIsOpen(true)}
+                    onClick={() => handleSetIsOpen(true)}
                     className="chatbox-fab animate-scale-in"
-                    title={`Ask ${persona.name}`}
+                    title={`Ask ${displayName}`}
                 >
                     <Image
                         src={themeAvatar}
-                        alt={persona.name}
+                        alt={displayName}
                         width={52}
                         height={52}
                         className="fab-avatar"
                     />
                     <span className="fab-pulse" />
                 </button>
-                <style jsx>{`
-                    .chatbox-fab {
-                        position: fixed;
-                        bottom: 24px;
-                        right: 24px;
-                        z-index: 90; /* Below GlobalNav (z-100) */
-                        width: 52px;
-                        height: 52px;
-                        border-radius: 50%;
-                        border: 2px solid var(--accent-warm);
-                        background: var(--surface-secondary);
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        cursor: pointer;
-                        box-shadow: var(--shadow-lg), 0 0 20px var(--accent-warm-glow);
-                        transition: all var(--transition-normal);
-                        padding: 0;
-                        overflow: hidden;
-                    }
-                    .chatbox-fab:hover {
-                        transform: scale(1.08);
-                        box-shadow: var(--shadow-xl), 0 0 30px var(--accent-warm-glow);
-                    }
-                    .chatbox-fab :global(.fab-avatar) {
-                        width: 52px;
-                        height: 52px;
-                        border-radius: 50%;
-                        object-fit: cover;
-                    }
-                    .fab-pulse {
-                        position: absolute;
-                        inset: -3px;
-                        border-radius: 50%;
-                        border: 2px solid var(--accent-warm);
-                        animation: fabPulse 2.5s ease-in-out infinite;
-                        pointer-events: none;
-                    }
-                    @keyframes fabPulse {
-                        0%, 100% { opacity: 0.5; transform: scale(1); }
-                        50% { opacity: 0; transform: scale(1.3); }
-                    }
-                `}</style>
             </>
         );
     }
@@ -275,75 +268,18 @@ export function AIChatbox() {
                 <>
                     <div className="chatbox-minimized">
                         <div className="minimized-left">
-                            <Image src={themeAvatar} alt={persona.name} width={28} height={28} className="minimized-avatar" />
-                            <span className="minimized-name">{persona.name}</span>
+                            <Image src={themeAvatar} alt={displayName} width={28} height={28} className="minimized-avatar" />
+                            <span className="minimized-name">{displayName}</span>
                         </div>
                         <div className="minimized-actions">
                             <button onClick={() => setIsMinimized(false)} className="minimized-btn" title="Expand">
                                 <Maximize2 size={14} />
                             </button>
-                            <button onClick={() => { setIsOpen(false); setIsMinimized(false); }} className="minimized-btn" title="Close">
+                            <button onClick={() => { handleSetIsOpen(false); setIsMinimized(false); }} className="minimized-btn" title="Close">
                                 <X size={14} />
                             </button>
                         </div>
                     </div>
-                    <style jsx>{`
-                        .chatbox-minimized {
-                            position: fixed;
-                            bottom: 24px;
-                            right: 24px;
-                            z-index: 91;
-                            display: flex;
-                            align-items: center;
-                            justify-content: space-between;
-                            width: 280px;
-                            padding: 8px 12px;
-                            border-radius: var(--radius-lg);
-                            background: var(--glass-bg-strong);
-                            backdrop-filter: var(--glass-blur);
-                            -webkit-backdrop-filter: var(--glass-blur);
-                            border: 1px solid var(--border);
-                            box-shadow: var(--shadow-lg);
-                        }
-                        .minimized-left {
-                            display: flex;
-                            align-items: center;
-                            gap: 8px;
-                        }
-                        .minimized-left :global(.minimized-avatar) {
-                            width: 28px;
-                            height: 28px;
-                            border-radius: 50%;
-                            object-fit: cover;
-                            border: 1.5px solid var(--accent-warm);
-                        }
-                        .minimized-name {
-                            font-size: 0.78rem;
-                            font-weight: 600;
-                            color: var(--text-primary);
-                        }
-                        .minimized-actions {
-                            display: flex;
-                            gap: 4px;
-                        }
-                        .minimized-btn {
-                            width: 28px;
-                            height: 28px;
-                            border-radius: var(--radius-sm);
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
-                            border: none;
-                            background: transparent;
-                            color: var(--text-tertiary);
-                            cursor: pointer;
-                            transition: all var(--transition-fast);
-                        }
-                        .minimized-btn:hover {
-                            background: var(--surface-tertiary);
-                            color: var(--text-primary);
-                        }
-                    `}</style>
                 </>
             )}
 
@@ -361,7 +297,7 @@ export function AIChatbox() {
                                 <button className="banner-close" onClick={() => setIsMinimized(true)} title="Minimize">
                                     <Minimize2 size={14} />
                                 </button>
-                                <button className="banner-close" onClick={() => setIsOpen(false)} title="Close">
+                                <button className="banner-close" onClick={() => handleSetIsOpen(false)} title="Close">
                                     <X size={14} />
                                 </button>
                             </div>
@@ -370,9 +306,9 @@ export function AIChatbox() {
                             <div className="banner-hero-wrap">
                                 <Image
                                     src={themeAvatar}
-                                    alt={persona.name}
+                                    alt={displayName}
                                     fill
-                                    className="object-cover transition-all duration-500"
+                                    className="object-cover object-[center_25%] transition-all duration-500"
                                     priority
                                 />
                                 {isStreaming && <div className="banner-thinking-glow" />}
@@ -381,8 +317,8 @@ export function AIChatbox() {
 
                             <div className="banner-label-glass">
                                 <div className="flex flex-col">
-                                    <span className="banner-agent-name">{persona.name}</span>
-                                    <span className="banner-agent-role">{persona.subtitle}</span>
+                                    <span className="banner-agent-name">{displayName}</span>
+                                    <span className="banner-agent-role">{basePersona.subtitle}</span>
                                 </div>
                                 <div className="ml-auto flex items-center gap-2">
                                     {isStreaming ? (
@@ -392,7 +328,7 @@ export function AIChatbox() {
                                         </div>
                                     ) : (
                                         <span className="text-[10px] tracking-widest opacity-50 uppercase font-bold">
-                                            {typeof window !== 'undefined' && JSON.parse(localStorage.getItem('novello-settings') || '{}').provider?.toUpperCase() || 'OLLAMA'}
+                                            {personaSettings.provider?.toUpperCase() || resolvedProvider}
                                         </span>
                                     )}
                                 </div>
@@ -403,10 +339,10 @@ export function AIChatbox() {
                         <div className="chatbox-messages">
                             {messages.length === 0 && !isStreaming && (
                                 <div className="chatbox-empty">
-                                    <p className="chatbox-empty-title">{persona.greeting}</p>
-                                    <p className="chatbox-empty-desc">{persona.description}</p>
+                                    <p className="chatbox-empty-title">{basePersona.greeting}</p>
+                                    <p className="chatbox-empty-desc">{basePersona.description}</p>
                                     <div className="chatbox-suggestions">
-                                        {persona.suggestions.map((s) => (
+                                        {basePersona.suggestions.map((s) => (
                                             <button
                                                 key={s}
                                                 className="chatbox-suggestion"
@@ -422,8 +358,8 @@ export function AIChatbox() {
                                 </div>
                             )}
 
-                            {messages.map((msg, i) => (
-                                <div key={i} className={`chat-msg chat-msg-${msg.role}`}>
+                            {messages.map((msg) => (
+                                <div key={msg.id} className={`chat-msg chat-msg-${msg.role}`}>
                                     <span className="msg-role">
                                         {msg.role === 'user' ? 'USER:' : 'NOVELLO:'}
                                     </span>
@@ -466,6 +402,8 @@ export function AIChatbox() {
                                     className={`action-btn ${voice.isListening ? 'action-btn-active-mic' : ''}`}
                                     onClick={handleVoiceNote}
                                     title={voice.isListening ? 'Stop Listening' : 'Voice Note'}
+                                    aria-label={voice.isListening ? 'Stop listening' : 'Start voice note'}
+                                    aria-pressed={voice.isListening}
                                 >
                                     <Mic size={18} />
                                     <span>{voice.isListening ? 'Listening...' : 'Voice Note'}</span>
@@ -474,6 +412,8 @@ export function AIChatbox() {
                                     className={`action-btn ${liveConvoMode ? 'action-btn-active-convo' : ''}`}
                                     onClick={() => setLiveConvoMode(!liveConvoMode)}
                                     title={liveConvoMode ? 'Disable Live Conversation' : 'Enable Live Conversation'}
+                                    aria-label={liveConvoMode ? 'Disable live conversation mode' : 'Enable live conversation mode'}
+                                    aria-pressed={liveConvoMode}
                                 >
                                     {liveConvoMode ? <Volume2 size={18} /> : <Headphones size={18} />}
                                     <span>{liveConvoMode ? 'Live ●' : 'Live Convo'}</span>
@@ -488,12 +428,9 @@ export function AIChatbox() {
                                         <span>Mute</span>
                                     </button>
                                 )}
-                                <button className="action-btn" title="File Upload">
-                                    <Upload size={18} />
-                                    <span>File Upload</span>
-                                </button>
+
                                 {isStreaming ? (
-                                    <button className="action-btn action-btn-stop" onClick={cancelStream} title="Stop">
+                                    <button className="action-btn action-btn-stop" onClick={cancelStream} title="Stop" aria-label="Stop AI generation">
                                         <StopCircle size={18} />
                                         <span>STOP</span>
                                     </button>
@@ -503,6 +440,7 @@ export function AIChatbox() {
                                         onClick={handleSend}
                                         disabled={!input.trim()}
                                         title="Send"
+                                        aria-label="Send message"
                                     >
                                         <Send size={18} />
                                         <span>SEND</span>
@@ -511,337 +449,6 @@ export function AIChatbox() {
                             </div>
                         </div>
                     </div>
-
-                    <style jsx>{`
-                /* ── Panel ── */
-                .chatbox-panel {
-                    position: fixed;
-                    top: var(--nav-height);
-                    right: 0;
-                    bottom: var(--ledger-height, 40vh);
-                    width: var(--chatbox-width);
-                    z-index: 99;
-                    display: flex;
-                    flex-direction: column;
-                    background: var(--glass-bg-strong);
-                    backdrop-filter: var(--glass-blur-heavy);
-                    -webkit-backdrop-filter: var(--glass-blur-heavy);
-                    border-left: 1px solid var(--border);
-                    box-shadow: var(--shadow-xl);
-                }
-
-                /* ── Banner ── */
-                .chatbox-banner {
-                    position: relative;
-                    width: 100%;
-                    overflow: hidden;
-                    border-bottom: 1px solid var(--border);
-                }
-                .banner-hero-wrap {
-                    position: relative;
-                    width: 100%;
-                    aspect-ratio: 16 / 10;
-                    background: #000;
-                    overflow: hidden;
-                }
-                .banner-overlay-gradient {
-                    position: absolute;
-                    inset: 0;
-                    background: linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 60%);
-                }
-                .banner-thinking-glow {
-                    position: absolute;
-                    inset: 0;
-                    box-shadow: inset 0 0 40px rgba(0, 113, 227, 0.4);
-                    animation: pulseGlow 2s infinite ease-in-out;
-                    z-index: 1;
-                }
-                @keyframes pulseGlow {
-                    0%, 100% { opacity: 0.3; }
-                    50% { opacity: 0.8; }
-                }
-
-                .banner-close-row {
-                    position: absolute;
-                    top: 12px;
-                    right: 12px;
-                    z-index: 20;
-                    display: flex;
-                    gap: 8px;
-                }
-                .banner-close, .banner-clear {
-                    width: 26px;
-                    height: 26px;
-                    border-radius: 50%;
-                    background: rgba(0,0,0,0.4);
-                    backdrop-filter: blur(8px);
-                    -webkit-backdrop-filter: blur(8px);
-                    color: rgba(255,255,255,0.8);
-                    border: 1px solid rgba(255,255,255,0.1);
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    cursor: pointer;
-                    transition: all 0.2s ease;
-                }
-                .banner-close:hover, .banner-clear:hover {
-                    background: rgba(255,255,255,0.9);
-                    color: #000;
-                    transform: scale(1.05);
-                }
-                
-                .banner-label-glass {
-                    position: absolute;
-                    bottom: 0;
-                    left: 0;
-                    right: 0;
-                    z-index: 10;
-                    display: flex;
-                    align-items: center;
-                    padding: 12px 16px;
-                    background: rgba(255,255,255,0.08);
-                    backdrop-filter: blur(20px);
-                    -webkit-backdrop-filter: blur(20px);
-                    border-top: 1px solid rgba(255,255,255,0.1);
-                }
-                .banner-agent-name {
-                    font-size: 14px;
-                    font-weight: 700;
-                    color: #fff;
-                    letter-spacing: -0.01em;
-                }
-                .banner-agent-role {
-                    font-size: 10px;
-                    color: rgba(255,255,255,0.6);
-                    font-weight: 500;
-                    text-transform: uppercase;
-                    letter-spacing: 0.05em;
-                }
-
-                /* ── Messages ── */
-                .chatbox-messages {
-                    flex: 1;
-                    overflow-y: auto;
-                    padding: 14px 16px;
-                    display: flex;
-                    flex-direction: column;
-                    gap: 12px;
-                }
-                .chatbox-messages::-webkit-scrollbar { width: 4px; }
-                .chatbox-messages::-webkit-scrollbar-thumb {
-                    background: var(--border-strong);
-                    border-radius: 2px;
-                }
-
-                /* ── Empty State ── */
-                .chatbox-empty {
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    text-align: center;
-                    padding: 1rem 0.5rem;
-                    gap: 6px;
-                }
-                .chatbox-empty-title {
-                    font-size: 0.85rem;
-                    font-weight: 600;
-                    color: var(--text-primary);
-                    margin: 0;
-                }
-                .chatbox-empty-desc {
-                    font-size: 0.75rem;
-                    color: var(--text-secondary);
-                    margin: 0;
-                    max-width: 260px;
-                    line-height: 1.5;
-                }
-                .chatbox-suggestions {
-                    display: flex;
-                    flex-direction: column;
-                    gap: 6px;
-                    margin-top: 10px;
-                    width: 100%;
-                }
-                .chatbox-suggestion {
-                    padding: 8px 14px;
-                    border-radius: var(--radius-md);
-                    background: var(--surface-tertiary);
-                    border: 1px solid var(--border);
-                    color: var(--text-secondary);
-                    font-size: 0.72rem;
-                    cursor: pointer;
-                    transition: all var(--transition-fast);
-                    text-align: left;
-                }
-                .chatbox-suggestion:hover {
-                    background: var(--surface-elevated);
-                    color: var(--text-primary);
-                    border-color: var(--border-strong);
-                }
-
-                /* ── Chat Bubbles ── */
-                .chat-msg {
-                    display: flex;
-                    flex-direction: column;
-                    gap: 4px;
-                }
-                .msg-role {
-                    font-size: 0.6rem;
-                    font-weight: 700;
-                    letter-spacing: 0.06em;
-                    color: var(--text-tertiary);
-                    padding-left: 2px;
-                }
-                .msg-bubble {
-                    padding: 10px 14px;
-                    border-radius: var(--radius-md);
-                    font-size: 0.78rem;
-                    line-height: 1.55;
-                }
-                .chat-msg-user .msg-bubble {
-                    background: var(--surface-tertiary);
-                    color: var(--text-primary);
-                    border: 1px solid var(--border);
-                    box-shadow: var(--shadow-xs);
-                }
-                .chat-msg-assistant .msg-bubble {
-                    background: var(--glass-bg-subtle);
-                    backdrop-filter: var(--glass-blur);
-                    -webkit-backdrop-filter: var(--glass-blur);
-                    color: var(--text-primary);
-                    border: 1px solid var(--accent-warm-glow);
-                    box-shadow: 0 4px 15px var(--accent-warm-muted);
-                    font-family: var(--font-serif);
-                    font-size: 0.82rem;
-                    line-height: 1.6;
-                }
-                .msg-text {
-                    white-space: pre-wrap;
-                    word-break: break-word;
-                }
-
-                /* ── Typing ── */
-                .typing-indicator {
-                    display: flex;
-                    gap: 4px;
-                    padding: 2px 0;
-                }
-                .typing-indicator span {
-                    width: 6px;
-                    height: 6px;
-                    border-radius: 50%;
-                    background: var(--accent-warm);
-                    animation: typeBounce 1.2s ease-in-out infinite;
-                }
-                .typing-indicator span:nth-child(2) { animation-delay: 0.15s; }
-                .typing-indicator span:nth-child(3) { animation-delay: 0.3s; }
-                @keyframes typeBounce {
-                    0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
-                    30% { transform: translateY(-4px); opacity: 1; }
-                }
-
-                /* ── Input Area ── */
-                .chatbox-input-area {
-                    padding: 12px 16px 14px;
-                    border-top: 1px solid var(--border);
-                    background: var(--surface-secondary);
-                }
-                .input-row {
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                    padding: 8px 14px;
-                    border-radius: var(--radius-lg);
-                    background: var(--surface-tertiary);
-                    border: 1px solid var(--border);
-                    margin-bottom: 10px;
-                    transition: border-color var(--transition-fast);
-                }
-                .input-row:focus-within {
-                    border-color: var(--accent-warm);
-                }
-                .input-prompt {
-                    font-size: 0.85rem;
-                    font-weight: 600;
-                    color: var(--accent-warm);
-                    flex-shrink: 0;
-                }
-                .chatbox-input {
-                    flex: 1;
-                    border: none;
-                    background: transparent;
-                    color: var(--text-primary);
-                    font-size: 0.78rem;
-                    font-family: inherit;
-                    resize: none;
-                    outline: none;
-                    max-height: 80px;
-                }
-                .chatbox-input::placeholder {
-                    color: var(--text-tertiary);
-                }
-
-                /* ── Action Bar ── */
-                .action-bar {
-                    display: grid;
-                    grid-template-columns: repeat(4, 1fr);
-                    gap: 8px;
-                }
-                .action-btn {
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    gap: 3px;
-                    padding: 8px 4px;
-                    border-radius: var(--radius-md);
-                    border: 1px solid var(--border);
-                    background: var(--surface-tertiary);
-                    color: var(--text-secondary);
-                    font-size: 0.55rem;
-                    font-weight: 600;
-                    letter-spacing: 0.02em;
-                    cursor: pointer;
-                    transition: all var(--transition-fast);
-                }
-                .action-btn:hover {
-                    background: var(--surface-elevated);
-                    color: var(--text-primary);
-                    border-color: var(--border-strong);
-                }
-                .action-btn-send {
-                    background: var(--accent-warm-muted);
-                    color: var(--accent-warm);
-                    border-color: var(--accent-warm-glow);
-                }
-                .action-btn-send:hover {
-                    background: var(--accent-warm);
-                    color: #fff;
-                }
-                .action-btn-send:disabled {
-                    opacity: 0.4;
-                    cursor: not-allowed;
-                }
-                .action-btn-stop {
-                    background: rgba(244, 63, 94, 0.1);
-                    color: var(--destructive);
-                    border-color: rgba(244, 63, 94, 0.2);
-                }
-                .action-btn-active-mic {
-                    background: rgba(239, 68, 68, 0.15) !important;
-                    color: #ef4444 !important;
-                    border-color: #ef4444 !important;
-                    animation: pulse-mic 1.2s infinite;
-                }
-                @keyframes pulse-mic {
-                    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.3); }
-                    50% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
-                }
-                .action-btn-active-convo {
-                    background: rgba(16, 185, 129, 0.15) !important;
-                    color: #10b981 !important;
-                    border-color: #10b981 !important;
-                }
-            `}</style>
                 </>
             )
             }

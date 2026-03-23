@@ -1,60 +1,48 @@
-import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, Auth } from 'firebase/auth';
-import { getFirestore, Firestore } from 'firebase/firestore';
-import { env } from './env';
+/**
+ * Local-First Firebase Client Stub
+ */
 
-// Firebase initialization — lazy & resilient.
-// Will not crash the app if credentials are missing.
+export const initializeApp = () => ({});
+export const getAuth = () => ({
+  onAuthStateChanged: (callback: any) => () => {},
+});
+export const getFirestore = () => ({});
+export const getStorage = () => ({});
 
-let _app: FirebaseApp | null = null;
-let _auth: Auth | null = null;
-let _db: Firestore | null = null;
-let _googleProvider: GoogleAuthProvider | null = null;
-let _initError: Error | null = null;
+// Firestore stubs
+export const collection = (...args: any[]) => ({});
+export const query = (...args: any[]) => ({});
+export const where = (...args: any[]) => ({});
+export const orderBy = (...args: any[]) => ({});
+export const limit = (...args: any[]) => ({});
+export const getDocs = async (...args: any[]) => ({ docs: [] as any[] });
+export const doc = (...args: any[]) => ({});
+export const getDoc = async (...args: any[]) => ({ exists: () => false, data: () => ({}) as any });
+export const setDoc = async (...args: any[]) => ({});
+export const updateDoc = async (...args: any[]) => ({});
+export const deleteDoc = async (...args: any[]) => ({});
+export const onSnapshot = (...args: any[]) => () => {};
+export const writeBatch = (...args: any[]) => ({
+  set: () => {},
+  update: () => {},
+  delete: () => {},
+  commit: async () => {},
+});
 
-function getApp(): FirebaseApp {
-    if (_initError) throw _initError;
-    if (_app) return _app;
+// Legacy/Helper exports
+export const getFirebaseDb = (...args: any[]) => ({});
+export const Timestamp = {
+  now: () => new Date(),
+  fromDate: (date: Date) => date,
+};
 
-    const firebaseConfig = {
-        apiKey: env.firebase.apiKey,
-        authDomain: env.firebase.authDomain,
-        projectId: env.firebase.projectId,
-        storageBucket: env.firebase.storageBucket,
-        messagingSenderId: env.firebase.messagingSenderId,
-        appId: env.firebase.appId,
-    };
+// Auth stubs
+export const signInWithPopup = async (...args: any[]) => ({ user: { uid: 'local-user' } });
+export const GoogleAuthProvider = class {};
 
-    try {
-        _app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-    } catch (err) {
-        _initError = err as Error;
-        throw _initError;
-    }
-    return _app;
-}
-
-export function getFirebaseAuth(): Auth {
-    if (_auth) return _auth;
-    _auth = getAuth(getApp());
-    return _auth;
-}
-
-export function getFirebaseDb(): Firestore {
-    if (_db) return _db;
-    _db = getFirestore(getApp());
-    return _db;
-}
-
-export function getGoogleProvider(): GoogleAuthProvider {
-    if (!_googleProvider) {
-        _googleProvider = new GoogleAuthProvider();
-        _googleProvider.setCustomParameters({ prompt: 'select_account' });
-    }
-    return _googleProvider;
-}
-
-// Check if Firebase is able to initialize
-export function isFirebaseConfigured(): boolean {
-    return Boolean(env.firebase.apiKey && env.firebase.projectId);
-}
+export default {
+  initializeApp,
+  getAuth,
+  getFirestore,
+  getStorage,
+};

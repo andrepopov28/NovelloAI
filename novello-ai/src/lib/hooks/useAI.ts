@@ -3,6 +3,7 @@ import { AIProvider, OutlineResult } from '@/lib/types';
 import { useProjects } from './useProjects';
 import { useAuth } from './useAuth';
 import { toast } from 'sonner';
+import DOMPurify from 'dompurify';
 
 // =============================================
 // useAI — Client hook for AI operations
@@ -11,11 +12,6 @@ import { toast } from 'sonner';
 // =============================================
 
 const AI_TIMEOUT_MS = 60_000;
-const MAX_GEMINI_RETRIES = 3;
-
-async function sleep(ms: number) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 /** Wraps a fetch with a 60-second AbortController timeout. */
 async function fetchWithTimeout(
@@ -23,10 +19,6 @@ async function fetchWithTimeout(
     options: RequestInit,
     signal: AbortSignal
 ): Promise<Response> {
-    const timeoutId = setTimeout(() => {
-        (options.signal as AbortController | undefined);
-    }, AI_TIMEOUT_MS);
-
     // Combine the caller's abort signal with a timeout signal
     const timeoutController = new AbortController();
     const timeoutTimer = setTimeout(() => timeoutController.abort('timeout'), AI_TIMEOUT_MS);
@@ -37,11 +29,9 @@ async function fetchWithTimeout(
     try {
         const res = await fetch(url, { ...options, signal: timeoutController.signal });
         clearTimeout(timeoutTimer);
-        clearTimeout(timeoutId);
         return res;
     } catch (err) {
         clearTimeout(timeoutTimer);
-        clearTimeout(timeoutId);
         throw err;
     }
 }
@@ -72,7 +62,7 @@ export function useAI(initialProvider: AIProvider = 'ollama', initialModel: stri
                 try {
                     const parsed = JSON.parse(saved);
                     provider = parsed.provider || provider;
-                    model = (parsed.provider === 'ollama' ? parsed.ollamaModel : parsed.geminiModel) || model;
+                    model = parsed.ollamaModel || model;
                 } catch { /* ignore */ }
             }
         }
@@ -99,8 +89,6 @@ export function useAI(initialProvider: AIProvider = 'ollama', initialModel: stri
     const sanitizeOutput = useCallback((html: string): string => {
         if (typeof window === 'undefined') return html;
         try {
-            // Dynamic import to avoid SSR issues
-            const DOMPurify = require('dompurify');
             return DOMPurify.sanitize(html, {
                 ALLOWED_TAGS: ['p', 'br', 'em', 'strong', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
                     'ul', 'ol', 'li', 'blockquote', 'span'],
@@ -112,35 +100,24 @@ export function useAI(initialProvider: AIProvider = 'ollama', initialModel: stri
     }, []);
 
     /**
-     * Fetch with Gemini 429 retry (exponential backoff: 2s, 4s, 8s).
-     * For non-Gemini providers, no retry is applied.
+     * Executes the fetch with timeout parameter.
      */
     const fetchWithRetry = useCallback(async (
         url: string,
         options: RequestInit,
-        signal: AbortSignal,
-        retries = MAX_GEMINI_RETRIES
+        signal: AbortSignal
     ): Promise<Response> => {
-        const res = await fetchWithTimeout(url, options, signal);
-
-        if (res.status === 429 && config.provider === 'gemini' && retries > 0) {
-            const attempt = MAX_GEMINI_RETRIES - retries + 1;
-            const delay = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s
-            toast.warning(`Gemini rate limit hit. Retrying in ${delay / 1000}s... (attempt ${attempt}/${MAX_GEMINI_RETRIES})`);
-            await sleep(delay);
-            return fetchWithRetry(url, options, signal, retries - 1);
-        }
-
-        if (res.status === 429 && retries === 0) {
-            toast.error('Gemini rate limit reached. Wait or switch to Ollama in Settings.');
-        }
-
-        return res;
-    }, [config.provider]);
+        return await fetchWithTimeout(url, options, signal);
+    }, []);
 
     // --- Streaming generation (rewrite / expand / freeform) ---
     const streamGenerate = useCallback(
-        async (prompt: string, action?: 'rewrite' | 'expand') => {
+        async (
+            prompt: string,
+            action?: 'rewrite' | 'expand',
+            activeChapterText?: string,
+            recentConversations?: Array<{ role: string; content: string }>
+        ) => {
             setLoading(true);
             setError(null);
             setStreamedText('');
@@ -149,7 +126,7 @@ export function useAI(initialProvider: AIProvider = 'ollama', initialModel: stri
             abortRef.current = controller;
 
             try {
-                const token = await user?.getIdToken();
+                const token = user?.uid ?? 'local';
                 const res = await fetchWithRetry(
                     '/api/ai/generate',
                     {
@@ -165,6 +142,8 @@ export function useAI(initialProvider: AIProvider = 'ollama', initialModel: stri
                             mode: 'stream',
                             action,
                             projectId,
+                            activeChapterText,
+                            recentConversations,
                         }),
                     },
                     controller.signal
@@ -239,7 +218,7 @@ export function useAI(initialProvider: AIProvider = 'ollama', initialModel: stri
             abortRef.current = controller;
 
             try {
-                const token = await user?.getIdToken();
+                const token = user?.uid ?? 'local';
                 const res = await fetchWithRetry(
                     '/api/ai/generate',
                     {
@@ -294,7 +273,14 @@ export function useAI(initialProvider: AIProvider = 'ollama', initialModel: stri
     );
 
     const writeChapter = useCallback(
-        async (title: string, synopsis: string, context?: string, styleProfile?: unknown) => {
+        async (
+            title: string,
+            synopsis: string,
+            context?: string,
+            styleProfile?: unknown,
+            activeChapterText?: string,
+            recentConversations?: Array<{ role: string; content: string }>
+        ) => {
             setLoading(true);
             setError(null);
 
@@ -302,7 +288,7 @@ export function useAI(initialProvider: AIProvider = 'ollama', initialModel: stri
             abortRef.current = controller;
 
             try {
-                const token = await user?.getIdToken();
+                const token = user?.uid ?? 'local';
                 const res = await fetchWithRetry(
                     '/api/ai/generate',
                     {
@@ -321,6 +307,8 @@ export function useAI(initialProvider: AIProvider = 'ollama', initialModel: stri
                             action: 'write_chapter',
                             styleProfile,
                             projectId,
+                            activeChapterText,
+                            recentConversations,
                         }),
                     },
                     controller.signal

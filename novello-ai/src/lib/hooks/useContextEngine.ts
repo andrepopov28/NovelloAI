@@ -4,7 +4,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { Chapter, Project } from '@/lib/types';
 import { updateChapter, updateProject } from '@/lib/firestore';
 import { useAuth } from './useAuth';
-import { serverTimestamp, Timestamp } from 'firebase/firestore';
+
 
 // =============================================
 // useContextEngine — Rolling Context from Chapter Summaries
@@ -35,7 +35,7 @@ export function useContextEngine(chapters: Chapter[]) {
                 // Strip HTML tags for a cleaner prompt
                 const textContent = chapter.content.replace(/<[^>]+>/g, '').trim();
 
-                const token = await user?.getIdToken();
+                const token = user?.uid ?? 'local';
                 const res = await fetch('/api/ai/generate', {
                     method: 'POST',
                     headers: {
@@ -90,7 +90,7 @@ export function useContextEngine(chapters: Chapter[]) {
             await updateProject(projectId, {
                 contextRollup: {
                     chapterSummaries: summaries,
-                    lastUpdated: serverTimestamp() as any as Timestamp,
+                    lastUpdated: Date.now(),
                 },
             });
         } catch (err) {
@@ -98,14 +98,18 @@ export function useContextEngine(chapters: Chapter[]) {
         }
     }, [chapters]);
 
-    // Summarize all chapters that lack summaries
+    // Summarize all chapters that lack summaries — runs up to 3 in parallel
     const summarizeAll = useCallback(
         async (provider: string = 'ollama', model: string = '') => {
             const needsSummary = chapters.filter(
                 (ch) => ch.content && ch.content.trim().length >= 50 && !ch.lastSummary
             );
-            for (const ch of needsSummary) {
-                await summarizeChapter(ch, provider, model);
+            const CONCURRENCY = 3;
+            for (let i = 0; i < needsSummary.length; i += CONCURRENCY) {
+                const batch = needsSummary.slice(i, i + CONCURRENCY);
+                await Promise.allSettled(
+                    batch.map((ch) => summarizeChapter(ch, provider, model))
+                );
             }
         },
         [chapters, summarizeChapter]

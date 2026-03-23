@@ -28,8 +28,9 @@ export function InlineAssist({ editor, rollingContext = '', projectId, chapterId
             if (!selectedText.trim()) return;
 
             setShowPreview(true);
-            // Pass context for continuity-aware generation
-            await streamGenerate(selectedText, action);
+            // Pass the full chapter text for Loom continuity window (up to 20k words downstream)
+            const activeChapterText = editor.getText();
+            await streamGenerate(selectedText, action, activeChapterText);
         },
         [editor, streamGenerate]
     );

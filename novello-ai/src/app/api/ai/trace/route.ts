@@ -1,23 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getFirebaseDb } from '@/lib/firebase';
-import { collection, getDocs, query, where, writeBatch, doc } from 'firebase/firestore';
+import { collection, getDocs, query, where, writeBatch, doc } from '@/lib/firebase';
 import type { Chapter, Entity } from '@/lib/types';
-import { verifyIdToken } from '@/lib/firebase-admin';
+import { verifyIdToken, db as adminDb } from '@/lib/firebase-admin';
 
 // =============================================
 // POST /api/ai/trace
-// Scans chapters for entity name mentions and
-// updates Entity.appearances[] accordingly.
+// Scans chapters for entity mentions and updates
+// Entity.appearances[]. Ownership-checked.
 // =============================================
 
 export async function POST(req: NextRequest) {
     try {
         const authHeader = req.headers.get('Authorization');
-        await verifyIdToken(authHeader);
+        const decoded = await verifyIdToken(authHeader);
 
         const { projectId } = await req.json();
         if (!projectId) {
             return NextResponse.json({ error: 'projectId is required' }, { status: 400 });
+        }
+
+        // ── Ownership check via Admin SDK ─────────────────────────────────
+        const projectDoc = await adminDb.collection('projects').doc(projectId).get();
+        if (!projectDoc.exists || projectDoc.data()?.userId !== decoded.uid) {
+            return NextResponse.json({ error: 'Project not found or unauthorized' }, { status: 403 });
         }
 
         const db = getFirebaseDb();
@@ -51,8 +57,8 @@ export async function POST(req: NextRequest) {
             const appearances: string[] = [];
 
             for (const chapter of chapters) {
-                // Strip HTML before matching
-                const text = (chapter.content || '').replace(/<[^>]+>/g, '');
+                // Strip HTML using safe regex (bounded to prevent ReDoS)
+                const text = (chapter.content || '').replace(/<[^>]{0,1000}>/g, '');
                 if (namePattern.test(text)) {
                     appearances.push(chapter.id);
                 }

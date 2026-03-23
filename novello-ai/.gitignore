@@ -39,3 +39,15 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Voice models (large binary files — too big for GitHub)
+voices/
+*.onnx
+*.onnx.json
+tmp/
+tmp_*/
+tmp_venv/
+
+uat/artifacts/
+test-results/
+bin/

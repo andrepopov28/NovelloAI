@@ -1,10 +1,8 @@
-import { Timestamp } from 'firebase/firestore';
-
 // =============================================
-// Novello AI v23 — Data Models (The Ironclad Schema)
+// Novello AI V33 — Data Models (The Ironclad Schema)
 // =============================================
 
-export type AIProvider = 'ollama' | 'gemini';
+export type AIProvider = 'ollama' | 'auto';
 
 export interface Project {
     id: string;
@@ -12,28 +10,28 @@ export interface Project {
     title: string;
     genre: string;
     synopsis: string; // The "North Star" premise
-    seriesId: string | null; // 🆕 Links to parent Series
+    seriesId: string | null; // Links to parent Series
     settings: {
         aiProvider: AIProvider;
         modelName: string;
         temperature: number; // 0.0–2.0, default 0.7
         includeSeriesContext: boolean; // Include synopses from other series books in context
     };
-    styleProfile: { // 🆕 Computed from existing chapters
+    styleProfile: { // Computed from existing chapters
         avgSentenceLength: number;
         vocabularyLevel: 'simple' | 'moderate' | 'literary';
         povConsistency: string;
         tenseUsage: string;
         dialogueRatio: number;
     } | null;
-    contextRollup: { // 🆕 Denormalized summary cache
+    contextRollup: { // Denormalized summary cache
         chapterSummaries: Array<{
             chapterId: string;
             order: number;
             title: string;
             summary: string;
         }>;
-        lastUpdated: Timestamp;
+        lastUpdated: number;
     };
     blurb: string | null;                // AI-generated marketing blurb (from Publish)
     metadata: {
@@ -46,8 +44,8 @@ export interface Project {
     targetWordCount?: number; // Target word count for progress tracking
     targetChapterCount?: number; // Target chapter count for progress tracking
     chapterCount: number;
-    createdAt: Timestamp;
-    updatedAt: Timestamp;
+    createdAt: number;
+    updatedAt: number;
     coverImage?: string;
 }
 
@@ -58,8 +56,8 @@ export interface Series {
     description: string;
     projectIds: string[]; // Ordered list of project IDs
     sharedEntityIds: string[]; // Entity IDs visible across all projects
-    createdAt: Timestamp;
-    updatedAt: Timestamp;
+    createdAt: number;
+    updatedAt: number;
 }
 
 export interface Chapter {
@@ -72,12 +70,12 @@ export interface Chapter {
     order: number;
     status: 'draft' | 'review' | 'final';
     lastSummary: string; // Cached for "The Loom" context engine
-    wordCount: number; // 🆕 Per-chapter word count
-    createdAt: Timestamp;
-    updatedAt: Timestamp;
+    wordCount: number; // Per-chapter word count
+    createdAt: number;
+    updatedAt: number;
 }
 
-export interface ChapterVersion { // 🆕
+export interface ChapterVersion { 
     id: string;
     chapterId: string;
     userId: string;
@@ -85,7 +83,7 @@ export interface ChapterVersion { // 🆕
     wordCount: number;
     source: 'autosave' | 'manual' | 'ai-generation' | 'import';
     isPinned: boolean;
-    createdAt: Timestamp;
+    createdAt: number;
 }
 
 export interface Entity {
@@ -104,12 +102,12 @@ export interface Entity {
         relationshipType: string;
         description: string;
     }>;
-    isShared: boolean; // 🆕 Series visibility
-    createdAt: Timestamp;
-    updatedAt: Timestamp;
+    isShared: boolean; // Series visibility
+    createdAt: number;
+    updatedAt: number;
 }
 
-export interface ContinuityAlert { // 🆕
+export interface ContinuityAlert {
     id: string;
     projectId: string;
     userId: string;
@@ -122,10 +120,10 @@ export interface ContinuityAlert { // 🆕
     sourceExcerpt: string;
     flaggedExcerpt: string;
     status: 'open' | 'dismissed' | 'resolved';
-    createdAt: Timestamp;
+    createdAt: number;
 }
 
-export interface AudiobookSession { // 🆕
+export interface AudiobookSession {
     id: string;
     projectId: string;
     userId: string;
@@ -140,18 +138,166 @@ export interface AudiobookSession { // 🆕
         chapterId: string;
         timeSeconds: number;
     };
-    createdAt: Timestamp;
-    updatedAt: Timestamp;
+    createdAt: number;
+    updatedAt: number;
 }
 
-export interface VoiceClone { // 🆕
-    id: string;
+export interface VoiceAvatar {
+    path?: string;
+    url?: string;
+    width?: number;
+    height?: number;
+    blurhash?: string;
+    updatedAt?: number;
+}
+
+export interface VoiceSettings {
+    speed: number;
+    pitch?: number;
+    pauseMs?: number;
+    emphasis?: string;
+    normalizeLufs?: boolean;
+    chapterPauseMs?: number;
+}
+
+export interface VoiceCatalog {
+    id: string; // voiceId
+    type: 'builtin';
+    provider: string; // e.g., 'piper'
+    engineVoiceId: string;
+    displayName: string;
+    language: string;
+    accent?: string;
+    gender?: string;
+    ageStyle?: string;
+    description?: string;
+    commercialOk: boolean;
+    licenseName: string;
+    licenseUrl: string;
+    tags?: string[];
+    defaultSettings?: VoiceSettings;
+    avatar?: VoiceAvatar;
+    createdAt: number;
+    updatedAt: number;
+}
+
+export interface VoiceClone { 
+    id: string; // voiceId
     userId: string;
-    name: string;
+    type: 'cloned';
+    source: 'upload' | 'recording' | 'import';
+    engineVoiceId?: string;
+
+    displayName: string; // Replaces previous 'name'
+    description?: string;
+    language?: string;
+    accent?: string;
+    gender?: string;
+    ageStyle?: string;
+    tags?: string[];
+
+    defaultSettings?: VoiceSettings;
+    avatar?: VoiceAvatar;
+
     sampleStoragePath: string;
     piperModelPath: string | null;
-    status: 'sampling' | 'training' | 'ready' | 'failed';
-    createdAt: Timestamp;
+
+    status: 'sampling' | 'training' | 'ready' | 'failed' | 'deleted';
+    createdAt: number;
+    updatedAt?: number;
+    deletedAt?: number;
+}
+
+export interface PersonaSettings { 
+    id: string; // persona key e.g., 'write', 'brainstorm', 'codex'
+    userId: string;
+    name: string;
+    provider: string;
+    model: string;
+    voiceId: string | null;
+    personality: string;
+    updatedAt: number;
+}
+
+export interface ExportJob {
+    id: string; // exportId
+    projectId: string; // The parent project
+    userId: string; // The owner
+    type: 'audiobook' | 'pdf' | 'epub';
+    status: 'queued' | 'processing' | 'completed' | 'failed' | 'cancelled';
+    progress: {
+        currentChapter: number;
+        totalChapters: number;
+        percentComplete: number;
+        stage: 'cleaning' | 'tts' | 'concatenating' | 'uploading';
+    };
+    formats: {
+        wav?: string; // Storage URL or path
+        mp3?: string; // Storage URL or path
+        m4b?: {
+            path: string;
+            sizeBytes: number;
+            durationMs: number;
+            codec: string;
+            bitrateKbps: number;
+            channels: number;
+            sampleRate: number;
+        };
+    };
+    bookMeta?: {
+        title: string;
+        author: string;
+        narrator: string;
+        language: string;
+        description: string;
+        year: string;
+        coverAssetRef?: string;
+    };
+    chapters?: Array<{
+        chapterId: string;
+        title: string;
+        index: number;
+        startMs: number;
+        endMs: number;
+        durationMs: number;
+    }>;
+    settings: {
+        voiceId: string;
+        language: string;
+        speed: number;
+        pauseDurationMs: number;
+    };
+    error?: string;
+    createdAt: number;
+    updatedAt: number;
+}
+
+export interface ExportChapter {
+    id: string; // chapterId
+    exportId: string;
+    order: number;
+    status: 'pending' | 'processing' | 'completed' | 'failed' | 'skipped'; // skipped if resuming
+    audioStoragePath?: string;
+    durationSeconds?: number;
+    updatedAt: number;
+}
+
+export interface PlaybackState {
+    id: string; // Matches exportId
+    userId: string;
+    positionMs: number;
+    speed: number;
+    updatedAt: number;
+    lastPlayedAt: number;
+}
+
+export interface Bookmark {
+    id: string; // bookmarkId
+    exportId: string;
+    userId: string;
+    positionMs: number;
+    label: string;
+    createdAt: number;
 }
 
 // =============================================
@@ -180,7 +326,6 @@ export interface OutlineResult {
 
 export interface AIHealthStatus {
     ollama: boolean;
-    gemini: boolean;
 }
 
 export interface AIState {

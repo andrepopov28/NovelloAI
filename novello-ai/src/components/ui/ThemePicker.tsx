@@ -10,7 +10,6 @@ export function ThemePicker() {
     const panelRef = useRef<HTMLDivElement>(null);
     const triggerRef = useRef<HTMLButtonElement>(null);
 
-    // Close on click-outside
     useEffect(() => {
         if (!isOpen) return;
         function handleClick(e: MouseEvent) {
@@ -54,68 +53,34 @@ export function ThemePicker() {
                 <div ref={panelRef} className="theme-panel" role="listbox" aria-label="Appearance">
                     <div className="theme-panel-header">Appearance</div>
 
-                    {/* Core Themes */}
-                    <div className="theme-category-label">Core</div>
-                    <div className="theme-grid">
-                        {THEME_META.filter(t => t.category === 'Core').map((t) => (
+                    <div className="theme-cards">
+                        {Object.values(THEME_META).map((t) => (
                             <button
                                 key={t.id}
-                                className={`theme-card ${theme === t.id ? 'theme-card-active' : ''}`}
+                                className={`theme-card-full ${theme === t.id ? 'theme-card-active' : ''}`}
                                 onClick={() => handleSelect(t.id)}
                                 role="option"
                                 aria-selected={theme === t.id}
                             >
-                                <div className="theme-swatch">
-                                    <div className="swatch-bar" style={{ background: t.swatches[0] }} />
-                                    <div className="swatch-bar" style={{ background: t.swatches[1] }} />
-                                    <div className="swatch-bar" style={{ background: t.swatches[2] }} />
+                                {/* Visual swatch strip */}
+                                <div className="theme-swatch-strip">
+                                    <div className="swatch-bg" style={{ background: t.swatches[0] }} />
+                                    <div className="swatch-text-bar" style={{ background: t.swatches[1], opacity: 0.7 }} />
+                                    <div className="swatch-accent-dot" style={{ background: t.swatches[2] }} />
                                 </div>
-                                {theme === t.id && <span className="theme-check">✓</span>}
-                                <span className="theme-label">{t.label}</span>
-                            </button>
-                        ))}
-                    </div>
 
-                    {/* Immersive Themes */}
-                    <div className="theme-category-label">Immersive</div>
-                    <div className="theme-grid">
-                        {THEME_META.filter(t => t.category === 'Immersive').map((t) => (
-                            <button
-                                key={t.id}
-                                className={`theme-card ${theme === t.id ? 'theme-card-active' : ''}`}
-                                onClick={() => handleSelect(t.id)}
-                                role="option"
-                                aria-selected={theme === t.id}
-                            >
-                                <div className="theme-swatch">
-                                    <div className="swatch-bar" style={{ background: t.swatches[0] }} />
-                                    <div className="swatch-bar" style={{ background: t.swatches[1] }} />
-                                    <div className="swatch-bar" style={{ background: t.swatches[2] }} />
+                                {/* Info */}
+                                <div className="theme-info">
+                                    <div className="theme-row">
+                                        <span className="theme-icon">{t.icon}</span>
+                                        <span className="theme-name">{t.label}</span>
+                                        {theme === t.id && <span className="theme-check">✓</span>}
+                                    </div>
+                                    <div className="theme-desc">{t.description}</div>
+                                    <div className="theme-mode-badge" data-mode={t.colorScheme}>
+                                        {t.colorScheme}
+                                    </div>
                                 </div>
-                                {theme === t.id && <span className="theme-check">✓</span>}
-                                <span className="theme-label">{t.label}</span>
-                            </button>
-                        ))}
-                    </div>
-
-                    {/* Editorial Themes */}
-                    <div className="theme-category-label">Editorial</div>
-                    <div className="theme-grid">
-                        {THEME_META.filter(t => t.category === 'Editorial').map((t) => (
-                            <button
-                                key={t.id}
-                                className={`theme-card ${theme === t.id ? 'theme-card-active' : ''}`}
-                                onClick={() => handleSelect(t.id)}
-                                role="option"
-                                aria-selected={theme === t.id}
-                            >
-                                <div className="theme-swatch">
-                                    <div className="swatch-bar" style={{ background: t.swatches[0] }} />
-                                    <div className="swatch-bar" style={{ background: t.swatches[1] }} />
-                                    <div className="swatch-bar" style={{ background: t.swatches[2] }} />
-                                </div>
-                                {theme === t.id && <span className="theme-check">✓</span>}
-                                <span className="theme-label">{t.label}</span>
                             </button>
                         ))}
                     </div>
@@ -130,7 +95,7 @@ export function ThemePicker() {
                     position: absolute;
                     top: calc(100% + 8px);
                     right: 0;
-                    width: 340px;
+                    width: 320px;
                     background: var(--glass-bg-strong);
                     backdrop-filter: var(--glass-blur-heavy);
                     -webkit-backdrop-filter: var(--glass-blur-heavy);
@@ -146,69 +111,88 @@ export function ThemePicker() {
                     to   { opacity: 1; transform: scale(1) translateY(0); }
                 }
                 .theme-panel-header {
-                    font-size: 13px;
+                    font-size: 11px;
                     font-weight: 600;
                     color: var(--text-secondary);
                     text-transform: uppercase;
-                    letter-spacing: 0.08em;
+                    letter-spacing: 0.1em;
                     margin-bottom: 12px;
                     padding-bottom: 8px;
                     border-bottom: 1px solid var(--border);
                 }
-                .theme-category-label {
-                    font-size: 10px;
-                    font-weight: 600;
-                    color: var(--text-tertiary);
-                    text-transform: uppercase;
-                    letter-spacing: 0.12em;
-                    margin: 10px 0 6px;
-                }
-                .theme-category-label:first-of-type {
-                    margin-top: 0;
-                }
-                .theme-grid {
-                    display: grid;
-                    grid-template-columns: repeat(3, 1fr);
-                    gap: 8px;
-                    margin-bottom: 4px;
-                }
-                .theme-card {
+                .theme-cards {
                     display: flex;
                     flex-direction: column;
+                    gap: 8px;
+                }
+                .theme-card-full {
+                    display: flex;
                     align-items: center;
-                    gap: 6px;
-                    padding: 10px 6px 8px;
+                    gap: 12px;
+                    padding: 10px 12px;
                     border-radius: var(--radius-md);
                     border: 1.5px solid transparent;
                     background: var(--surface-secondary);
                     cursor: pointer;
-                    transition: all 150ms ease;
-                    position: relative;
+                    transition: all 160ms ease;
+                    text-align: left;
+                    width: 100%;
                 }
-                .theme-card:hover {
+                .theme-card-full:hover {
                     border-color: var(--text-tertiary);
-                    transform: translateY(-1px);
+                    transform: translateX(2px);
                 }
                 .theme-card-active {
                     border-color: var(--accent) !important;
-                    box-shadow: 0 0 0 1px var(--accent), 0 0 12px var(--accent-glow);
+                    box-shadow: 0 0 0 1px var(--accent), 0 0 14px var(--accent-glow);
                 }
-                .theme-swatch {
-                    display: flex;
-                    gap: 3px;
-                    width: 100%;
-                    height: 32px;
-                    border-radius: 4px;
+                .theme-swatch-strip {
+                    position: relative;
+                    width: 52px;
+                    height: 44px;
+                    border-radius: 8px;
                     overflow: hidden;
-                    border: 1px solid rgba(128, 128, 128, 0.15);
+                    flex-shrink: 0;
+                    border: 1px solid rgba(128,128,128,0.2);
                 }
-                .swatch-bar {
+                .swatch-bg {
+                    position: absolute;
+                    inset: 0;
+                }
+                .swatch-text-bar {
+                    position: absolute;
+                    bottom: 8px;
+                    left: 6px;
+                    right: 6px;
+                    height: 4px;
+                    border-radius: 2px;
+                }
+                .swatch-accent-dot {
+                    position: absolute;
+                    top: 8px;
+                    right: 8px;
+                    width: 10px;
+                    height: 10px;
+                    border-radius: 50%;
+                }
+                .theme-info {
                     flex: 1;
+                    min-width: 0;
+                }
+                .theme-row {
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                    margin-bottom: 3px;
+                }
+                .theme-icon { font-size: 14px; }
+                .theme-name {
+                    font-size: 13px;
+                    font-weight: 600;
+                    color: var(--text-primary);
                 }
                 .theme-check {
-                    position: absolute;
-                    top: 4px;
-                    right: 4px;
+                    margin-left: auto;
                     width: 16px;
                     height: 16px;
                     border-radius: 50%;
@@ -219,18 +203,26 @@ export function ThemePicker() {
                     align-items: center;
                     justify-content: center;
                     font-weight: 700;
+                    flex-shrink: 0;
                 }
-                .theme-label {
-                    font-size: 10px;
-                    font-weight: 500;
-                    color: var(--text-secondary);
-                    text-align: center;
-                    line-height: 1.2;
-                    white-space: nowrap;
-                    overflow: hidden;
-                    text-overflow: ellipsis;
-                    max-width: 100%;
+                .theme-desc {
+                    font-size: 11px;
+                    color: var(--text-tertiary);
+                    margin-bottom: 5px;
                 }
+                .theme-mode-badge {
+                    display: inline-block;
+                    font-size: 9px;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    letter-spacing: 0.08em;
+                    padding: 2px 6px;
+                    border-radius: 4px;
+                    color: #fff;
+                }
+                .theme-mode-badge[data-mode="dim"]   { background: #7c5a2a; }
+                .theme-mode-badge[data-mode="light"] { background: #0071e3; }
+                .theme-mode-badge[data-mode="dark"]  { background: #00664e; }
             `}</style>
         </div>
     );

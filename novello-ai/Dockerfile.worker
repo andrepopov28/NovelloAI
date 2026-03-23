@@ -1,0 +1,17 @@
+FROM node:20-slim
+
+# Install system dependencies (ffmpeg for audiobook worker, etc.)
+RUN apt-get update && apt-get install -y ffmpeg python3 make g++ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Enable pnpm
+RUN corepack enable
+
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+
+COPY . .
+
+# Command will be overridden by docker-compose
+CMD ["echo", "No worker specified"]

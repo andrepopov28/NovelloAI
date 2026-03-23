@@ -1,0 +1,49 @@
+
+> novello-ai@0.1.0 uat:headless
+> vitest run --dir uat/headless
+
+
+[1m[46m RUN [49m[22m [36mv4.0.18 [39m[90m/Users/andrepopov/Documents/NovelloAI/novello-ai[39m
+
+[90mstderr[2m | uat/headless/api-contracts.test.ts[2m > [22m[2mAPI Contract Validations (Strict Zod Schemas)[2m > [22m[2mPOST /api/ai/audiobook/cancel[2m > [22m[2mshould accept valid payload
+[22m[39mAPI /api/ai/audiobook/cancel Error: TypeError: __vite_ssr_import_2__.audiobookQueue.getJob is not a function
+    at Module.POST [90m(/Users/andrepopov/Documents/NovelloAI/novello-ai/[39msrc/app/api/ai/audiobook/cancel/route.ts:44:42[90m)[39m
+[90m    at processTicksAndRejections (node:internal/process/task_queues:105:5)[39m
+    at [90m/Users/andrepopov/Documents/NovelloAI/novello-ai/[39muat/headless/api-contracts.test.ts:86:25
+    at [90mfile:///Users/andrepopov/Documents/NovelloAI/novello-ai/[39mnode_modules/[4m.pnpm[24m/@vitest+runner@4.0.18/node_modules/[4m@vitest/runner[24m/dist/index.js:915:20
+
+ [32m✓[39m uat/headless/api-contracts.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 29[2mms[22m[39m
+ [32m✓[39m uat/headless/token-monitor.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 6969[2mms[22m[39m
+     [33m[2m✓[22m[39m logs token events correctly in Firestore [33m 4688[2mms[22m[39m
+ [31m❯[39m uat/headless/worker-pipelines.test.ts [2m([22m[2m2 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 7874[2mms[22m[39m
+[31m     [31m×[31m simulates Audiobook Pipeline state transitions[39m[33m 5189[2mms[22m[39m
+     [33m[2m✓[22m[39m simulates Voice Clone transition [33m 1286[2mms[22m[39m
+ [32m✓[39m uat/headless/security-rules.test.ts [2m([22m[2m15 tests[22m[2m)[22m[33m 8976[2mms[22m[39m
+     [33m[2m✓[22m[39m Denies unauthenticated read/write to users [33m 4711[2mms[22m[39m
+     [33m[2m✓[22m[39m Allows authenticated user to write their own document [33m 824[2mms[22m[39m
+     [33m[2m✓[22m[39m Denies cross-tenant write to users [33m 721[2mms[22m[39m
+ [32m✓[39m uat/headless/agentic-tools.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 9048[2mms[22m[39m
+     [33m[2m✓[22m[39m validates tool-call JSON correctness for create_codex_entity using LLM Judge [33m 6818[2mms[22m[39m
+     [33m[2m✓[22m[39m validates tool-call JSON correctness for generate_audiobook using LLM Judge [33m 387[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m uat/headless/worker-pipelines.test.ts[2m > [22mWorker Pipelines Integration[2m > [22msimulates Audiobook Pipeline state transitions
+[31m[1mError[22m: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+[36m [2m❯[22m uat/headless/worker-pipelines.test.ts:[2m30:5[22m[39m
+    [90m 28| [39m[34mdescribe[39m([32m'Worker Pipelines Integration'[39m[33m,[39m () [33m=>[39m {
+    [90m 29| [39m
+    [90m 30| [39m    [34mit[39m([32m'simulates Audiobook Pipeline state transitions'[39m[33m,[39m [35masync[39m () [33m=>[39m {
+    [90m   | [39m    [31m^[39m
+    [90m 31| [39m        [35mconst[39m db [33m=[39m uatContext[33m.[39m[34mfirestore[39m()[33m;[39m
+    [90m 32| [39m        [35mconst[39m exportId [33m=[39m [32m'audiobook-export-1'[39m[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m4 passed[39m[22m[90m (5)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m28 passed[39m[22m[90m (29)[39m
+[2m   Start at [22m 19:14:06
+[2m   Duration [22m 10.18s[2m (transform 676ms, setup 0ms, import 4.63s, tests 32.90s, environment 1ms)[22m
+

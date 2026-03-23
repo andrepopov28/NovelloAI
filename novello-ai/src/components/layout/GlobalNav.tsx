@@ -54,12 +54,57 @@ const dashboardNavItems = [
 ];
 
 const projectNavNodes = [
-    { key: 'write', label: 'Write', icon: PenTool, path: '', image: STITCH_IMGS.write },
-    { key: 'brainstorm', label: 'Brainstorm', icon: Lightbulb, path: '/brainstorm', image: STITCH_IMGS.brainstorm },
-    { key: 'codex', label: 'Codex', icon: BookOpen, path: '/codex', image: STITCH_IMGS.codex },
-    { key: 'audiobook', label: 'Audiobook', icon: Headphones, path: '/audiobook', image: STITCH_IMGS.audiobook },
-    { key: 'publish', label: 'Publish', icon: Send, path: '/publish', image: STITCH_IMGS.publish },
-    { key: 'settings', label: 'Settings', icon: Settings, path: '/settings', image: STITCH_IMGS.settings },
+    {
+        key: 'write', label: 'Write', icon: PenTool, path: '', image: STITCH_IMGS.write,
+        subNodes: [
+            { label: 'Editor', description: 'Write your manuscript', path: '' },
+            { label: 'Continuity', description: 'Check manuscript consistency', path: '/continuity' }
+        ]
+    },
+    {
+        key: 'brainstorm', label: 'Brainstorm', icon: Lightbulb, path: '/brainstorm', image: STITCH_IMGS.brainstorm,
+        subNodes: [
+            { label: 'Brainstorm Chat', description: 'AI brainstorming assistant', path: '/brainstorm' },
+            { label: 'Mind Map', description: 'Visual node relationships', path: '/brainstorm?tab=mindmap' },
+            { label: 'Whiteboard', description: 'Freeform sticky notes', path: '/brainstorm?tab=whiteboard' },
+            { label: 'Outline', description: 'AI chapter generation', path: '/brainstorm?tab=outline' }
+        ]
+    },
+    {
+        key: 'codex', label: 'Codex', icon: BookOpen, path: '/codex', image: STITCH_IMGS.codex,
+        subNodes: [
+            { label: 'Characters', description: 'Manage characters', path: '/codex?filter=Character' },
+            { label: 'Locations', description: 'Manage locations', path: '/codex?filter=Location' },
+            { label: 'Items', description: 'Manage items', path: '/codex?filter=Item' },
+            { label: 'Lore', description: 'World lore and rules', path: '/codex?filter=Lore' }
+        ]
+    },
+    {
+        key: 'audiobook', label: 'Audiobook', icon: Headphones, path: '/audiobook', image: STITCH_IMGS.audiobook,
+        subNodes: [
+            { label: 'Studio', description: 'Main audiobook recording', path: '/audiobook?view=studio' },
+            { label: 'Voice Library', description: 'Explore available voices', path: '/audiobook?view=library' },
+            { label: 'Voice Cloning', description: 'Clone your own voice', path: '/audiobook?view=library&clone=true' },
+            { label: 'Audio Export', description: 'Export your audiobook', path: '/audiobook?view=export' }
+        ]
+    },
+    {
+        key: 'publish', label: 'Publish', icon: Send, path: '/publish', image: STITCH_IMGS.publish,
+        subNodes: [
+            { label: 'Metadata', description: 'Book details and cover', path: '/publish' },
+            { label: 'Export', description: 'Export to EPUB and PDF', path: '/publish' }
+        ]
+    },
+    {
+        key: 'settings', label: 'Settings', icon: Settings, path: '/settings', image: STITCH_IMGS.settings,
+        subNodes: [
+            { label: 'Profile', description: 'Your account settings', path: '/settings/profile' },
+            { label: 'Agentic Team', description: 'Manage AI Personas', path: '/settings/ai-team' },
+            { label: 'AI Configuration', description: 'Global LLM providers', path: '/settings/ai' },
+            { label: 'Voice Settings', description: 'TTS engines and keys', path: '/settings/voice' },
+            { label: 'Themes', description: 'Appearance and UI', path: '/settings/themes' }
+        ]
+    },
 ];
 
 export function GlobalNav() {
@@ -89,24 +134,37 @@ export function GlobalNav() {
     // Build nav items depending on context
     const navItems = projectId
         ? [
-            { href: '/app', label: 'Home', icon: Home, key: 'home', image: '' },
+            { href: '/app', label: 'Home', icon: Home, key: 'home', image: '', subNodes: [] },
             ...projectNavNodes.map((n) => ({
-                href: `/project/${projectId}${n.path}`,
+                href: n.key === 'settings' ? n.path : `/project/${projectId}${n.path}`,
                 label: n.label,
                 icon: n.icon,
                 key: n.key,
                 image: n.image,
+                subNodes: n.subNodes?.map(sub => ({
+                    label: sub.label,
+                    description: sub.description,
+                    href: n.key === 'settings' ? sub.path : `/project/${projectId}${sub.path}`
+                })) || []
             })),
         ]
         : [
-            { key: 'home', label: 'Home', icon: Home, href: '/app', image: STITCH_IMGS.home },
-            { key: 'write', label: 'Write', icon: PenTool, href: getProjectLink(activeProject?.id, ''), image: STITCH_IMGS.write },
-            { key: 'brainstorm', label: 'Brainstorm', icon: Lightbulb, href: getProjectLink(activeProject?.id, '/brainstorm'), image: STITCH_IMGS.brainstorm },
-            { key: 'data', label: 'Data', icon: BookOpen, href: getProjectLink(activeProject?.id, '/codex'), image: STITCH_IMGS.data },
-            { key: 'audiobook', label: 'Audiobook', icon: Headphones, href: getProjectLink(activeProject?.id, '/audiobook'), image: STITCH_IMGS.audiobook },
-            { key: 'publish', label: 'Publish', icon: Send, href: getProjectLink(activeProject?.id, '/publish'), image: STITCH_IMGS.publish },
-            { key: 'series', label: 'Series', icon: BookOpen, href: '/series', image: STITCH_IMGS.series },
-            { key: 'settings', label: 'Settings', icon: Settings, href: '/settings', image: STITCH_IMGS.settings },
+            { key: 'home', label: 'Home', icon: Home, href: '/app', image: STITCH_IMGS.home, subNodes: [] },
+            { key: 'write', label: 'Write', icon: PenTool, href: getProjectLink(activeProject?.id, ''), image: STITCH_IMGS.write, subNodes: [] },
+            { key: 'brainstorm', label: 'Brainstorm', icon: Lightbulb, href: getProjectLink(activeProject?.id, '/brainstorm'), image: STITCH_IMGS.brainstorm, subNodes: [] },
+            { key: 'data', label: 'Data', icon: BookOpen, href: getProjectLink(activeProject?.id, '/codex'), image: STITCH_IMGS.data, subNodes: [] },
+            { key: 'audiobook', label: 'Audiobook', icon: Headphones, href: getProjectLink(activeProject?.id, '/audiobook'), image: STITCH_IMGS.audiobook, subNodes: [] },
+            { key: 'publish', label: 'Publish', icon: Send, href: getProjectLink(activeProject?.id, '/publish'), image: STITCH_IMGS.publish, subNodes: [] },
+            { key: 'series', label: 'Series', icon: BookOpen, href: '/series', image: STITCH_IMGS.series, subNodes: [] },
+            {
+                key: 'settings', label: 'Settings', icon: Settings, href: '/settings', image: STITCH_IMGS.settings, subNodes: [
+                    { label: 'Profile', description: 'Your account settings', href: '/settings/profile' },
+                    { label: 'Agentic Team', description: 'Manage AI Personas', href: '/settings/ai-team' },
+                    { label: 'AI Configuration', description: 'Global LLM providers', href: '/settings/ai' },
+                    { label: 'Voice Settings', description: 'TTS engines and keys', href: '/settings/voice' },
+                    { label: 'Themes', description: 'Appearance and UI', href: '/settings/themes' }
+                ]
+            },
         ];
 
     const getIsActive = (item: (typeof navItems)[0]) => {
@@ -121,6 +179,7 @@ export function GlobalNav() {
     const firstName = displayName.split(' ')[0];
 
     return (
+        <>
         <nav
             className="fixed top-0 left-0 right-0 z-[100] h-[80px] min-h-[80px] flex items-center justify-between px-10 border-b transition-all duration-300"
             style={{
@@ -144,40 +203,70 @@ export function GlobalNav() {
                     {navItems.map((item) => {
                         const isActive = getIsActive(item);
                         return (
-                            <Link
-                                key={item.key}
-                                href={item.href}
-                                prefetch={false}
-                                className={`
-                                    flex items-center justify-center px-8 gap-3 min-w-[160px] 
-                                    border-l relative overflow-hidden no-underline transition-all duration-300 group
-                                    ${isActive ? 'bg-[rgba(255,255,255,0.08)]' : 'bg-transparent hover:bg-[rgba(255,255,255,0.04)]'}
-                                `}
-                                style={{
-                                    borderColor: 'var(--border)',
-                                }}
-                            >
-                                {/* Subtle active bar at top */}
-                                {isActive && (
-                                    <div className="absolute top-0 left-0 right-0 h-[3px] bg-[var(--accent-blue)]" />
-                                )}
+                            <div key={item.key} className="relative group h-full flex flex-col">
+                                <Link
+                                    href={item.href}
+                                    prefetch={false}
+                                    className={`
+                                        flex items-center justify-center px-8 gap-3 min-w-[160px] h-full
+                                        border-l relative overflow-hidden no-underline transition-all duration-300
+                                        ${isActive ? 'bg-[rgba(255,255,255,0.08)]' : 'bg-transparent group-hover:bg-[rgba(255,255,255,0.04)]'}
+                                    `}
+                                    style={{
+                                        borderColor: 'var(--border)',
+                                    }}
+                                >
+                                    {/* Subtle active bar at top */}
+                                    {isActive && (
+                                        <div className="absolute top-0 left-0 right-0 h-[3px] bg-[var(--accent-blue)]" />
+                                    )}
 
-                                {/* Photorealistic Icon/Image */}
-                                {item.image && (
-                                    <div className="w-6 h-6 rounded overflow-hidden flex-shrink-0 transition-transform duration-300 group-hover:scale-110">
-                                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                                        <img src={item.image} alt="" className="w-full h-full object-cover" />
+                                    {/* Photorealistic Icon/Image */}
+                                    {item.image && (
+                                        <div className="w-6 h-6 rounded overflow-hidden flex-shrink-0 transition-transform duration-300 group-hover:scale-110">
+                                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                                            <img src={item.image} alt="" className="w-full h-full object-cover" />
+                                        </div>
+                                    )}
+                                    <span
+                                        className={`font-sans text-[11px] font-bold tracking-[0.15em] uppercase transition-all duration-300 ${isActive ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]'}`}
+                                    >
+                                        {item.label}
+                                    </span>
+                                    {item.key === navItems[navItems.length - 1].key && (
+                                        <div className="absolute right-0 top-0 bottom-0 w-[1px] bg-[var(--border)]" />
+                                    )}
+                                </Link>
+
+                                {/* Mega Menu Dropdown */}
+                                {item.subNodes && item.subNodes.length > 0 && (
+                                    <div className="absolute top-[80px] left-0 min-w-[280px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[200] pt-1">
+                                        <div
+                                            className="rounded-xl shadow-2xl overflow-hidden p-2 flex flex-col gap-1 border border-[var(--border-strong)]"
+                                            style={{
+                                                background: 'var(--glass-bg)',
+                                                backdropFilter: 'var(--glass-blur)'
+                                            }}
+                                        >
+                                            {item.subNodes.map((sub: any) => (
+                                                <Link
+                                                    key={sub.label}
+                                                    href={sub.href}
+                                                    prefetch={false}
+                                                    className="flex flex-col px-4 py-3 rounded-lg hover:bg-[var(--surface-tertiary)] transition-colors no-underline group/item"
+                                                >
+                                                    <span className="text-[12px] font-bold text-[var(--accent-warm)] mb-1 uppercase tracking-wider group-hover/item:text-[var(--text-primary)] transition-colors">
+                                                        {sub.label}
+                                                    </span>
+                                                    <span className="text-[12px] text-[var(--text-secondary)]">
+                                                        {sub.description}
+                                                    </span>
+                                                </Link>
+                                            ))}
+                                        </div>
                                     </div>
                                 )}
-                                <span
-                                    className={`font-sans text-[11px] font-bold tracking-[0.15em] uppercase transition-all duration-300 ${isActive ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]'}`}
-                                >
-                                    {item.label}
-                                </span>
-                                {item.key === navItems[navItems.length - 1].key && (
-                                    <div className="absolute right-0 top-0 bottom-0 w-[1px] bg-[var(--border)]" />
-                                )}
-                            </Link>
+                            </div>
                         );
                     })}
                     {/* Closing border for the last item handled via conditional or just implicit? 
@@ -229,5 +318,46 @@ export function GlobalNav() {
                 </div>
             </div>
         </nav>
+        {/* ─── Mobile Bottom Tab Bar (< 1024px) ───────────────────────────── */}
+        <nav
+            className="fixed bottom-0 left-0 right-0 z-[100] flex lg:hidden items-stretch border-t"
+            style={{
+                height: '64px',
+                background: 'var(--glass-bg)',
+                backdropFilter: 'var(--glass-blur)',
+                borderColor: 'var(--border)',
+            }}
+        >
+            {[
+                { key: 'home',      label: 'Home',       icon: Home,       href: '/app' },
+                { key: 'write',     label: 'Write',      icon: PenTool,    href: projectId ? `/project/${projectId}` : getProjectLink(activeProject?.id, '') },
+                { key: 'brainstorm',label: 'Ideas',      icon: Lightbulb,  href: projectId ? `/project/${projectId}/brainstorm` : getProjectLink(activeProject?.id, '/brainstorm') },
+                { key: 'audiobook', label: 'Audio',      icon: Headphones, href: projectId ? `/project/${projectId}/audiobook` : getProjectLink(activeProject?.id, '/audiobook') },
+                { key: 'settings',  label: 'Settings',   icon: Settings,   href: '/settings' },
+            ].map((item) => {
+                const isActive = item.key === 'settings'
+                    ? pathname.startsWith('/settings')
+                    : item.key === 'home'
+                    ? pathname === '/app'
+                    : pathname.startsWith(item.href);
+                const Icon = item.icon;
+                return (
+                    <Link
+                        key={item.key}
+                        href={item.href}
+                        prefetch={false}
+                        className="flex-1 flex flex-col items-center justify-center gap-1 relative no-underline transition-all duration-200"
+                        style={{ color: isActive ? 'var(--accent-warm)' : 'var(--text-secondary)' }}
+                    >
+                        {isActive && (
+                            <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-[2px] bg-[var(--accent-warm)] rounded-full" />
+                        )}
+                        <Icon size={20} strokeWidth={isActive ? 2.2 : 1.8} />
+                        <span className="text-[9px] font-bold tracking-wider uppercase">{item.label}</span>
+                    </Link>
+                );
+            })}
+        </nav>
+        </>
     );
 }

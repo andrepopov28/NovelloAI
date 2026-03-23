@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { ThemeProvider } from '@/lib/hooks/useTheme';
@@ -58,24 +58,17 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
     if (!user) return null;
 
     return (
-        <ThemeProvider>
-            <ActiveProjectProvider>
-                <ErrorBoundary>
-                    <GlobalNav />
-                    <main style={{
-                        paddingTop: '80px', // Matches global-nav height (updated from 64px)
-                        paddingRight: 'var(--chatbox-width)', // Prevent content overlapping the fixed chatbox
-                        minHeight: '100vh',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        position: 'relative',
-                    }}>
+        <ActiveProjectProvider>
+            <ErrorBoundary>
+                <GlobalNav />
+                <main className="flex-1 overflow-auto relative p-6">
+                    <Suspense fallback={<div className="p-8 text-center text-secondary">Loading...</div>}>
                         {children}
-                    </main>
-                    <AIChatbox />
-                    <ProjectLedger />
-                </ErrorBoundary>
-            </ActiveProjectProvider>
-        </ThemeProvider>
+                    </Suspense>
+                </main>
+                <AIChatbox />
+                <ProjectLedger />
+            </ErrorBoundary>
+        </ActiveProjectProvider>
     );
 }

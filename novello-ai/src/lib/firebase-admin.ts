@@ -1,54 +1,66 @@
-import * as admin from 'firebase-admin';
-
-if (!admin.apps.length) {
-    try {
-        const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_KEY
-            ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY)
-            : undefined;
-
-        if (serviceAccount) {
-            admin.initializeApp({
-                credential: admin.credential.cert(serviceAccount),
-                projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-            });
-        } else {
-            // Fallback to application default credentials (ADC)
-            admin.initializeApp({
-                projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-            });
-        }
-    } catch (error) {
-        console.error('Firebase admin initialization error', error);
-    }
-}
-
-export const auth = admin.auth();
-export const db = admin.firestore();
-
 /**
- * Verifies the Firebase ID token from the Authorization header.
- * @param authHeader The Authorization header value (e.g., "Bearer <token>")
- * @returns The decoded token if valid, otherwise throws an error.
+ * Local-First Firebase Admin Stub
  */
+
+const MOCK_USER = {
+  uid: 'local-user',
+  email: 'local@novello.ai',
+  displayName: 'Local Author',
+};
+
+export const auth = {
+  verifyIdToken: async (token: string) => MOCK_USER,
+  getUser: async (uid: string) => MOCK_USER,
+};
+
+const mockFirestore = () => ({
+  collection: (name: string) => ({
+    doc: (id?: string) => {
+      const docId = id || `mock-id-${Math.random().toString(36).substr(2, 9)}`;
+      return {
+        id: docId,
+        get: async () => ({ 
+          id: docId,
+          exists: true, 
+          data: () => ({ userId: MOCK_USER.uid }) as any 
+        }),
+        set: async (data: any) => ({}),
+        update: async (data: any) => ({}),
+        delete: async () => ({}),
+      };
+    },
+    add: async (data: any) => ({ id: 'mock-id' }),
+    where: function(...args: any[]) { return this; },
+    orderBy: function(...args: any[]) { return this; },
+    limit: function(...args: any[]) { return this; },
+    get: async () => ({ 
+        empty: false, 
+        docs: [] as any[] 
+    }),
+  }),
+});
+
+export const db = mockFirestore();
+export const firestore = mockFirestore;
+
+export const storage = () => ({
+  bucket: () => ({
+    file: () => ({
+      save: async (data: any) => ({}),
+      download: async () => [Buffer.from([])],
+      delete: async () => ({}),
+      getSignedUrl: async (options: any) => ['#'],
+    }),
+  }),
+});
+
 export async function verifyIdToken(authHeader: string | null) {
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        throw new Error('Unauthorized: Missing or invalid token');
-    }
-
-    const token = authHeader.split('Bearer ')[1];
-
-    try {
-        const decodedToken = await auth.verifyIdToken(token);
-        return decodedToken;
-    } catch (error) {
-        if (process.env.NODE_ENV === 'development') {
-            const isLocalError = (error as any)?.code === 'app/no-credentials' || (error as any)?.message?.includes('credentials');
-            if (isLocalError) {
-                console.warn('[Firebase Admin Warning] Missing or invalid credentials. Bypassing check in development mode.');
-                return { uid: 'dev-user', email: 'dev@novello.ai' } as any;
-            }
-        }
-        console.error('Token verification error:', error);
-        throw new Error('Unauthorized: Token verification failed');
-    }
+  return MOCK_USER;
 }
+
+// Support for import * as admin from 'firebase-admin'
+export default {
+  auth: () => ({ ...auth }),
+  firestore,
+  storage,
+};

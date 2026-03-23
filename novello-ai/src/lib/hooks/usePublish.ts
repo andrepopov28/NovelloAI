@@ -33,7 +33,7 @@ export function usePublish() {
             setExportError(null);
             try {
                 // ✅ FIX: Include Authorization header (was missing — caused 401)
-                const token = await user?.getIdToken();
+                const token = user?.uid ?? 'local';
                 const res = await fetch('/api/export/epub', {
                     method: 'POST',
                     headers: {
@@ -69,7 +69,7 @@ export function usePublish() {
             setExportError(null);
             try {
                 // ✅ FIX: Include Authorization header (was missing — caused 401)
-                const token = await user?.getIdToken();
+                const token = user?.uid ?? 'local';
                 const res = await fetch(`/api/export/pdf?projectId=${projectId}`, {
                     headers: {
                         'Authorization': `Bearer ${token}`,

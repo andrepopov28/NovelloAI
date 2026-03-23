@@ -17,7 +17,6 @@ interface PlaybackState {
 
 export function useAudiobook() {
     const [voices] = useState<PiperVoice[]>(NEURAL_VOICES);
-    const [customVoices, setCustomVoices] = useState<PiperVoice[]>([]);
     const [playback, setPlayback] = useState<PlaybackState>({
         isPlaying: false,
         isPaused: false,
@@ -44,7 +43,7 @@ export function useAudiobook() {
         });
     }, []);
 
-    const allVoices = [...voices, ...customVoices];
+    const allVoices = voices;
 
     const stripHtml = useCallback((html: string) => {
         const div = document.createElement('div');
@@ -203,13 +202,6 @@ export function useAudiobook() {
         setPlayback((prev) => ({ ...prev, selectedVoiceId: voiceId }));
     }, []);
 
-    // Voice cloning
-    const cloneVoice = useCallback(async (sampleBlob: Blob) => {
-        const cloned = await piperService.simulateCloning(sampleBlob);
-        setCustomVoices((prev) => [...prev, cloned]);
-        return cloned;
-    }, []);
-
     return {
         voices: allVoices,
         playback,
@@ -219,6 +211,5 @@ export function useAudiobook() {
         stop,
         setSpeed,
         setVoice,
-        cloneVoice,
     };
 }

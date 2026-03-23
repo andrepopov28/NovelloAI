@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { updateChapter, recalculateProjectWordCount, recalculateProjectStyle, saveVersion } from '@/lib/firestore';
+import { updateChapter, updateProjectWordCountDelta, saveVersion } from '@/lib/firestore';
 import { saveChapterOffline, isOnline, setupAutoSync, syncOfflineChanges } from '@/lib/offline-storage';
 import type { SyncStatus } from '@/lib/types';
 import { useAuth } from '@/lib/hooks/useAuth';
@@ -14,6 +14,7 @@ export function useAutoSave(
     chapterId: string | null,
     projectId: string | null,
     content: string,
+    disabled = false,
 ) {
     const { user } = useAuth();
     const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
@@ -22,6 +23,7 @@ export function useAutoSave(
     const retryCount = useRef(0);
     const contentRef = useRef(content);
     const lastVersionTime = useRef<number>(Date.now());
+    const prevWordCountRef = useRef<number>(0);
 
     // Keep ref in sync
     contentRef.current = content;
@@ -64,7 +66,7 @@ export function useAutoSave(
     }, []);
 
     const save = useCallback(async () => {
-        if (!chapterId || !projectId) return;
+        if (!chapterId || !projectId || disabled) return;
 
         setSyncStatus('saving');
 
@@ -76,9 +78,13 @@ export function useAutoSave(
 
             // Try to save to Firestore first
             if (isOnline()) {
-                await updateChapter(chapterId, { content: contentRef.current });
-                await recalculateProjectWordCount(projectId);
-                await recalculateProjectStyle(projectId);
+                // Compute word count delta and update incrementally (avoids full chapter scan)
+                const newWordCount = wordCount;
+                const delta = newWordCount - prevWordCountRef.current;
+                prevWordCountRef.current = newWordCount;
+
+                await updateChapter(chapterId, { content: contentRef.current, wordCount: newWordCount });
+                await updateProjectWordCountDelta(projectId, delta);
 
                 // Check version threshold: 60 seconds (PRD US-004-01)
                 const now = Date.now();
@@ -142,7 +148,7 @@ export function useAutoSave(
                 toast.error('Failed to save changes. Please check your connection.');
             }
         }
-    }, [chapterId, projectId, user]);
+    }, [chapterId, projectId, user, disabled]);
 
     useEffect(() => {
         if (!chapterId || !content) return;

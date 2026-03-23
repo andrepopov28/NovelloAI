@@ -29,6 +29,5 @@ export const env = {
 
 // Server-side only — never exposed to the browser
 export const serverEnv = {
-    geminiApiKey: process.env.GEMINI_API_KEY || '',
     stripeSecretKey: process.env.STRIPE_SECRET_KEY || '',
 } as const;

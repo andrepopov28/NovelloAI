@@ -27,6 +27,7 @@ interface TipTapEditorProps {
   rollingContext?: string;
   projectId?: string;
   chapterId?: string;
+  editable?: boolean;
 }
 
 export function TipTapEditor({
@@ -39,6 +40,7 @@ export function TipTapEditor({
   rollingContext = '',
   projectId,
   chapterId,
+  editable = true,
 }: TipTapEditorProps) {
   // Keep a ref to entities for the suggestion plugin
   const entitiesRef = useRef<Entity[]>(entities);
@@ -159,10 +161,11 @@ export function TipTapEditor({
   const editor = useEditor({
     extensions,
     content,
+    editable,
     immediatelyRender: false,
     editorProps: {
       attributes: {
-        class: 'manuscript prose-editor focus:outline-none min-h-[60vh]',
+        class: `manuscript prose-editor focus:outline-none min-h-[60vh] ${!editable ? 'cursor-wait opacity-80' : ''}`,
       },
     },
     onUpdate: ({ editor }) => {

@@ -3,7 +3,7 @@ import { useChapters } from './useChapters';
 import { useEntities } from './useEntities';
 import { useAuth } from './useAuth';
 import { ContinuityAlert, Chapter } from '../types';
-import { Timestamp } from 'firebase/firestore';
+
 
 export function useContinuityChecker(projectId: string) {
     const { chapters } = useChapters(projectId);
@@ -58,7 +58,7 @@ export function useContinuityChecker(projectId: string) {
                     sourceExcerpt: '', // Could be filled if we knew previous source
                     flaggedExcerpt: a.quote || '',
                     status: 'open',
-                    createdAt: Timestamp.now(),
+                  createdAt: Date.now(),
                 }));
                 setAlerts(newAlerts);
             } else {

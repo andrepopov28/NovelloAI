@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getFirebaseDb } from '@/lib/firebase';
-import { collection, getDocs, query, where, orderBy, doc, getDoc } from 'firebase/firestore';
+import { collection, getDocs, query, where, orderBy, doc, getDoc } from '@/lib/firebase';
 import type { Project, Chapter } from '@/lib/types';
 import epub from 'epub-gen-memory';
 import { verifyIdToken } from '@/lib/firebase-admin';
@@ -13,7 +13,7 @@ import { verifyIdToken } from '@/lib/firebase-admin';
 export async function POST(req: NextRequest) {
     try {
         const authHeader = req.headers.get('Authorization');
-        await verifyIdToken(authHeader);
+        const decoded = await verifyIdToken(authHeader);
 
         const { projectId } = await req.json();
         if (!projectId) {
@@ -28,6 +28,11 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Project not found' }, { status: 404 });
         }
         const project = { id: projectSnap.id, ...projectSnap.data() } as Project;
+
+        // ── Ownership check ───────────────────────────────────────────────────
+        if ((project as any).userId !== decoded.uid) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
 
         // Fetch chapters in order
         const chaptersSnap = await getDocs(
@@ -47,15 +52,15 @@ export async function POST(req: NextRequest) {
 
         // Generate EPUB buffer (epub-gen-memory takes options + content separately)
         const content = chapters.map((ch) => ({
-            title: ch.title,
-            content: ch.content || '<p>(Empty chapter)</p>',
+            title: escapeHtml(ch.title),
+            content: escapeHtml(ch.content || '<p>(Empty chapter)</p>'),
         }));
 
         const buffer = await epub(
             {
-                title: project.title || 'Untitled',
-                author: 'Novello AI Author',
-                description: project.synopsis || '',
+                title: escapeHtml(project.title || 'Untitled'),
+                author: escapeHtml(project.metadata?.authorName || 'Novello AI Author'),
+                description: escapeHtml(project.synopsis || ''),
             },
             content
         );
@@ -75,6 +80,10 @@ export async function POST(req: NextRequest) {
         const message = error instanceof Error ? error.message : 'EPUB export failed';
         return NextResponse.json({ error: message }, { status: 500 });
     }
+}
+
+function escapeHtml(str: string): string {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function sanitizeFilename(name: string): string {

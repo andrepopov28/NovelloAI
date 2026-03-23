@@ -1,9 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { streamGenerate, generateJSON } from '@/lib/ai';
+import { streamGenerate, generateJSON, AIProvider } from '@/lib/ai';
 import { REWRITE_PROMPT, EXPAND_PROMPT, OUTLINE_PROMPT, SUMMARIZE_PROMPT } from '@/lib/prompts';
 import { verifyIdToken, db } from '@/lib/firebase-admin';
 import { LoomEngine } from '@/lib/loom-engine';
 import { Project, Chapter, Entity, Series } from '@/lib/types';
+import type { Tool } from 'ai';
+import { z } from 'zod';
+
+// ── Request body schema ──────────────────────
+const GenerateRequestSchema = z.object({
+    prompt: z.string().max(50_000).optional(),
+    provider: z.enum(['auto', 'ollama']).default('auto'),
+    model: z.string().default(''),
+    mode: z.enum(['stream', 'json']).default('stream'),
+    action: z.string().optional(),
+    genre: z.string().optional(),
+    context: z.string().optional(),
+    projectId: z.string().optional(),
+    activeChapterText: z.string().optional(),
+    recentConversations: z.array(z.object({ role: z.string(), content: z.string() })).optional(),
+    endpointMode: z.string().default('generate'),
+    title: z.string().optional(),
+    synopsis: z.string().optional(),
+    styleProfile: z.unknown().optional(),
+});
 
 // =============================================
 // POST /api/ai/generate
@@ -13,39 +33,58 @@ import { Project, Chapter, Entity, Series } from '@/lib/types';
 
 export async function POST(req: NextRequest) {
     try {
-        const authHeader = req.headers.get('Authorization');
-        await verifyIdToken(authHeader);
+        const startTime = Date.now();
+        const requestId = crypto.randomUUID();
 
-        const body = await req.json();
+        const authHeader = req.headers.get('Authorization');
+
+        // ── Auth: return 401, not 500, on bad/missing token ──
+        let userId: string;
+        try {
+            const decodedToken = await verifyIdToken(authHeader);
+            userId = decodedToken.uid;
+        } catch {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        // ── Parse & validate request body ────────────────────
+        const rawBody = await req.json();
+        const parseResult = GenerateRequestSchema.safeParse(rawBody);
+        if (!parseResult.success) {
+            return NextResponse.json(
+                { error: 'Invalid request', details: parseResult.error.flatten() },
+                { status: 400 }
+            );
+        }
         const {
             prompt,
-            provider = 'ollama',
-            model = '',
-            mode = 'stream',
+            provider,
+            model,
+            mode,
             action,
             genre,
             context: manualContext,
-            projectId, // 🆕 Use projectId to build Loom context
-        } = body as {
-            prompt: string;
-            provider: 'ollama' | 'gemini';
-            model: string;
-            mode: 'stream' | 'json';
-            action?: 'rewrite' | 'expand' | 'outline' | 'summarize' | 'write_chapter';
-            genre?: string;
-            context?: string;
-            projectId?: string;
-            title?: string;
-            synopsis?: string;
-            styleProfile?: any;
-        };
+            projectId,
+            activeChapterText,
+            recentConversations,
+            endpointMode,
+        } = parseResult.data;
+        const body = parseResult.data;
 
-        let context = manualContext;
+        if (!prompt && action !== 'write_chapter') {
+            return NextResponse.json({ error: 'prompt is required' }, { status: 400 });
+        }
 
-        // --- Loom Context Engine Integration ---
+        // 1. Determine base context cap logic
+        let baseMaxTokens = 25000; // ~100k chars for 'generate' or 'codex'
+        if (endpointMode === 'inline') baseMaxTokens = 2500; // ~10k chars
+        else if (endpointMode === 'brainstorm') baseMaxTokens = 6250; // ~25k chars
+        else if (endpointMode === 'audiobook' || endpointMode === 'cover') baseMaxTokens = 2000;
+
+        // 2. Pre-fetch project documents so we don't repeat DB calls on fallback
+        let projectData: Project | undefined, chaptersData: Chapter[] = [], entitiesData: Entity[] = [], seriesData: Series | null = null;
         if (projectId && !manualContext) {
             try {
-                // Fetch context data in parallel
                 const [projectDoc, chaptersSnap, entitiesSnap] = await Promise.all([
                     db.collection('projects').doc(projectId).get(),
                     db.collection('chapters').where('projectId', '==', projectId).get(),
@@ -53,99 +92,162 @@ export async function POST(req: NextRequest) {
                 ]);
 
                 if (projectDoc.exists) {
-                    const projectData = { id: projectDoc.id, ...projectDoc.data() } as Project;
-                    const chaptersData = chaptersSnap.docs.map(d => ({ id: d.id, ...d.data() } as Chapter));
-                    const entitiesData = entitiesSnap.docs.map(d => ({ id: d.id, ...d.data() } as Entity));
+                    projectData = { id: projectDoc.id, ...projectDoc.data() } as Project;
+                    chaptersData = chaptersSnap.docs.map(d => ({ id: d.id, ...d.data() } as Chapter));
+                    entitiesData = entitiesSnap.docs.map(d => ({ id: d.id, ...d.data() } as Entity));
 
-                    let seriesData: Series | null = null;
                     if (projectData.seriesId) {
                         const seriesDoc = await db.collection('series').doc(projectData.seriesId).get();
                         if (seriesDoc.exists) {
                             seriesData = { id: seriesDoc.id, ...seriesDoc.data() } as Series;
                         }
                     }
-
-                    context = LoomEngine.assembleContext(
-                        projectData,
-                        chaptersData,
-                        entitiesData,
-                        seriesData,
-                        { currentText: prompt || '' }
-                    );
                 }
             } catch (err) {
-                console.warn('[Loom Error] Failed to assemble context:', err);
-                // Fallback to manual context or no context
+                console.warn(`[AI] ${requestId} | Failed to fetch project data:`, err);
             }
         }
 
-        if (!prompt && action !== 'write_chapter') {
-            return NextResponse.json({ error: 'prompt is required' }, { status: 400 });
-        }
+        // 3. Generation retry loop (to handle context limits)
+        let attempts = 0;
+        let finalResponse: Response | null = null;
+        let isTruncated = false;
 
-        // Build the final prompt based on action
-        let finalPrompt = prompt;
-        if (action === 'rewrite') {
-            finalPrompt = REWRITE_PROMPT(prompt, '', context);
-        } else if (action === 'expand') {
-            finalPrompt = EXPAND_PROMPT(prompt, context);
-        } else if (action === 'outline') {
-            finalPrompt = OUTLINE_PROMPT(prompt, genre || '');
-        } else if (action === 'summarize') {
-            finalPrompt = SUMMARIZE_PROMPT(prompt);
-        } else if (action === 'write_chapter') {
-            const { WRITE_CHAPTER_PROMPT } = await import('@/lib/prompts');
-            finalPrompt = WRITE_CHAPTER_PROMPT(body.title || 'Untitled', body.synopsis || prompt, context, body.styleProfile);
-        }
+        while (attempts < 2 && !finalResponse) {
+            attempts++;
+            const maxTokens = attempts === 1 ? baseMaxTokens : Math.floor(baseMaxTokens / 2);
+            if (attempts > 1) isTruncated = true;
 
-        if (mode === 'json') {
-            const text = await generateJSON({ prompt: finalPrompt, provider, model });
-            return NextResponse.json({ result: text });
-        }
+            let context = manualContext;
+            if (projectId && !manualContext && projectData) {
+                context = LoomEngine.assembleContext(
+                    projectData, chaptersData, entitiesData, seriesData,
+                    { currentText: prompt || '', activeChapterText, recentConversations, maxTokens }
+                );
+            }
 
-        // Streaming mode
-        const result = await streamGenerate({ prompt: finalPrompt, provider, model });
-        // Manually implement Data Stream Protocol since toDataStreamResponse is missing in this version
-        const stream = new ReadableStream({
-            async start(controller) {
-                const encoder = new TextEncoder();
-                try {
-                    for await (const chunk of result.textStream) {
-                        const message = `0:${JSON.stringify(chunk)}\n`;
-                        controller.enqueue(encoder.encode(message));
+            let finalPrompt = prompt;
+            if (action === 'rewrite') {
+                finalPrompt = REWRITE_PROMPT(prompt!, '', context);
+            } else if (action === 'expand') {
+                finalPrompt = EXPAND_PROMPT(prompt!, context);
+            } else if (action === 'outline') {
+                finalPrompt = OUTLINE_PROMPT(prompt!, genre || '');
+            } else if (action === 'summarize') {
+                finalPrompt = SUMMARIZE_PROMPT(prompt!);
+            } else if (action === 'write_chapter') {
+                const { WRITE_CHAPTER_PROMPT } = await import('@/lib/prompts');
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                finalPrompt = WRITE_CHAPTER_PROMPT(body.title || 'Untitled', body.synopsis || prompt!, context, body.styleProfile as any);
+            }
+
+            try {
+                if (mode === 'json') {
+                    const text = await generateJSON({ prompt: finalPrompt!, provider: provider as AIProvider, model: model || undefined });
+
+                    const latency = Date.now() - startTime;
+                    console.log(`[AI] ${requestId} | Mode: ${endpointMode} | Length: ${finalPrompt!.length}c | Model: ${provider}/${model} | Latency: ${latency}ms | Truncated: ${isTruncated}`);
+
+                    finalResponse = NextResponse.json({ result: text });
+                } else {
+                    let toolsObj = undefined;
+
+                    // Only enable tools if we have project context, it's a general request, and the model isn't struggling
+                    if (projectId && userId && attempts === 1 && !action) {
+                                            const entitySchema = z.object({
+                            name: z.string().describe('The name of the entity'),
+                            type: z.enum(['character', 'location', 'lore']).describe('The classification of the entity'),
+                            description: z.string().describe('A detailed background description of the entity'),
+                        });
+                        const audiobookSchema = z.object({
+                            confirm: z.boolean().describe('Set to true to confirm queueing the audiobook generation.'),
+                        });
+                        const publishSchema = z.object({
+                            format: z.enum(['epub', 'pdf']).describe('The desired export format'),
+                        });
+
+                        toolsObj = {
+                            create_codex_entity: {
+                                description: 'Create a new world-building entity (character, location, lore item) in the codex database. Call this if the user asks to "save this character", "add this place to the codex", etc.',
+                                inputSchema: entitySchema,
+                                execute: async (args: z.infer<typeof entitySchema>) => {
+                                    const docRef = await db.collection('entities').add({
+                                        projectId,
+                                        name: args.name,
+                                        type: args.type,
+                                        description: args.description,
+                                        createdAt: Date.now(),
+                                        updatedAt: Date.now()
+                                    });
+                                    return `Successfully created entity ${args.name} with ID ${docRef.id}`;
+                                }
+                            } as Tool<z.infer<typeof entitySchema>, string>,
+                            generate_audiobook: {
+                                description: 'Schedule the entire book to be generated into an audiobook mp3. Call this if the user asks to "generate my audiobook", "make an audiobook", etc.',
+                                inputSchema: audiobookSchema,
+                                execute: async (args: z.infer<typeof audiobookSchema>) => {
+                                    if (!args.confirm) return 'User did not confirm. Audio book generation cancelled.';
+
+                                    const exportRef = db.collection('exports').doc();
+                                    await exportRef.set({
+                                        id: exportRef.id,
+                                        projectId,
+                                        userId,
+                                        type: 'audiobook',
+                                        status: 'queued',
+                                        progress: { currentChapter: 0, totalChapters: 0, percentComplete: 0, stage: 'cleaning' },
+                                        formats: {},
+                                        settings: { voiceId: 'default', language: 'en-US', speed: 1.0, pauseDurationMs: 1000 },
+                                        createdAt: Date.now(),
+                                        updatedAt: Date.now()
+                                    });
+                                    return `Successfully queued the audiobook generation (Job ID: ${exportRef.id}). Tell the user they can track progress globally in the Audiobook node.`;
+                                }
+                            } as Tool<z.infer<typeof audiobookSchema>, string>,
+                            publish_export: {
+                                description: 'Export the final manuscript into EPUB or PDF format.',
+                                inputSchema: publishSchema,
+                                execute: async (args: z.infer<typeof publishSchema>) => {
+                                    return `Mock: Successfully scheduled ${args.format} export for this project.`;
+                                }
+                            } as Tool<z.infer<typeof publishSchema>, string>,
+                        };
                     }
-                } catch (error) {
-                    controller.error(error);
-                } finally {
-                    controller.close();
-                }
-            }
-        });
 
-        return new Response(stream, {
-            headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-        });
+                    const result = await streamGenerate({
+                        prompt: finalPrompt!,
+                        provider: provider as AIProvider,
+                        model: model || undefined,
+                        tools: toolsObj
+                    });
+
+                    const latency = Date.now() - startTime;
+                    console.log(`[AI] ${requestId} | Mode: ${endpointMode} | Length: ${finalPrompt!.length}c | Model: ${provider}/${model} | Latency: ${latency}ms | Truncated: ${isTruncated}`);
+
+                    // Use the SDK's built-in stream response which handles both text and tool-call events
+                    finalResponse = result.toTextStreamResponse();
+                }
+            } catch (error: any) {
+                const msg = error.message || '';
+                const isQuotaError = msg.includes('quota') || msg.includes('rate limit') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('exceeded your current quota');
+                const isLengthError = msg.toLowerCase().includes('context') || msg.toLowerCase().includes('length') || msg.toLowerCase().includes('token');
+
+                if ((isLengthError || isQuotaError) && attempts === 1) {
+                    console.warn(`[AI] ${requestId} | Recoverable error caught (${msg.substring(0, 50)}), retrying with half context...`);
+                    continue; // Loop again, cuts maxTokens in half
+                }
+
+                // If attempt 2 or unrecoverable, throw up to external catch
+                throw error;
+            }
+        }
+
+        return finalResponse as Response;
     } catch (error) {
         console.error('[AI Generate Error]', error);
         const message = error instanceof Error ? error.message : 'AI generation failed';
 
-        // Detect Gemini quota / rate-limit errors and return 429 so the client
-        // can show a proper "quota exhausted" message rather than a generic 500.
-        const isQuotaError =
-            message.includes('quota') ||
-            message.includes('rate limit') ||
-            message.includes('RESOURCE_EXHAUSTED') ||
-            message.includes('exceeded your current quota');
-
-        if (isQuotaError) {
-            return NextResponse.json(
-                {
-                    error: 'Gemini free-tier quota exhausted. The daily limit resets at midnight Pacific Time. You can switch to Ollama in Settings → AI, or wait for the quota to reset.',
-                    code: 'QUOTA_EXHAUSTED',
-                },
-                { status: 429 }
-            );
-        }
+        // Return standard 500 for generation failures.
 
         return NextResponse.json({ error: message }, { status: 500 });
     }

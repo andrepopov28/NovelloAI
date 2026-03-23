@@ -1,0 +1,16 @@
+# Chapter 1: The Emoji & The Ampersand!
+
+"Hello!" she yelled across the room, & the room echoed back: "Hello!"
+Here is a list of characters that break bad XML parsers:
+- < (less than)
+- > (greater than)
+- & (ampersand)
+- " (double quotes)
+- ' (single quotes)
+
+And some emojis for good measure: 🧐🔥📚🚀
+Testing a very long heading below.
+
+## This is a profoundly long heading that might wrap weirdly in some older e-readers and cause rendering engines to panic if they don't break words correctly!
+
+<script>alert('xss attempt')</script>

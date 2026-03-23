@@ -1,159 +1,187 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useAuth } from './useAuth';
 
 export interface ChatMessage {
-    id: string;
-    role: 'user' | 'assistant';
-    content: string;
-    timestamp: number;
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: number;
 }
 
-export function useChat(projectId?: string) {
-    const { user } = useAuth();
-    const [messages, setMessages] = useState<ChatMessage[]>([]);
-    const [isStreaming, setIsStreaming] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const abortRef = useRef<AbortController | null>(null);
+export interface ChatConfig {
+  projectId?: string;
+  personaId?: string;
+  systemPrompt?: string;
+  provider?: string;
+  model?: string;
+}
 
-    const sendMessage = useCallback(
-        async (content: string, context?: { projectTitle?: string; chapterContent?: string }) => {
-            if (!content.trim() || isStreaming) return;
+const CHAT_HISTORY_KEY = (projectId: string, personaId: string) =>
+  `novello_chat_${projectId}_${personaId}`;
 
-            const userMsg: ChatMessage = {
-                id: `user-${Date.now()}`,
-                role: 'user',
-                content: content.trim(),
-                timestamp: Date.now(),
-            };
+export function useChat(config: ChatConfig = {}) {
+  const { projectId, personaId, systemPrompt: customPrompt, provider, model } = config;
+  const { user } = useAuth();
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
-            setMessages((prev) => [...prev, userMsg]);
-            setIsStreaming(true);
-            setError(null);
+  // Load chat history from localStorage on mount
+  useEffect(() => {
+    if (!projectId || !personaId) return;
+    try {
+      const stored = localStorage.getItem(CHAT_HISTORY_KEY(projectId, personaId));
+      if (stored) {
+        setMessages(JSON.parse(stored));
+      }
+    } catch { /* ignore parse errors */ }
+  }, [projectId, personaId]);
 
-            const assistantId = `assistant-${Date.now()}`;
-            const assistantMsg: ChatMessage = {
-                id: assistantId,
-                role: 'assistant',
-                content: '',
-                timestamp: Date.now(),
-            };
-            setMessages((prev) => [...prev, assistantMsg]);
+  // Persist messages to localStorage whenever they update
+  useEffect(() => {
+    if (!projectId || !personaId || messages.length === 0) return;
+    try {
+      // Keep last 50 messages to avoid storage bloat
+      const toStore = messages.slice(-50);
+      localStorage.setItem(CHAT_HISTORY_KEY(projectId, personaId), JSON.stringify(toStore));
+    } catch { /* ignore storage errors */ }
+  }, [messages, projectId, personaId]);
 
-            const controller = new AbortController();
-            abortRef.current = controller;
+  const sendMessage = useCallback(
+    async (content: string, context?: { projectTitle?: string; chapterContent?: string }) => {
+      if (!content.trim() || isStreaming) return;
 
+      const userMsg: ChatMessage = {
+        id: `user-${Date.now()}`,
+        role: 'user',
+        content: content.trim(),
+        timestamp: Date.now(),
+      };
+
+      setMessages((prev) => [...prev, userMsg]);
+      setIsStreaming(true);
+      setError(null);
+
+      const assistantId = `assistant-${Date.now()}`;
+      const assistantMsg: ChatMessage = {
+        id: assistantId,
+        role: 'assistant',
+        content: '',
+        timestamp: Date.now(),
+      };
+      setMessages((prev) => [...prev, assistantMsg]);
+
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      try {
+        let systemPrompt = customPrompt ||
+          'You are Novello AI, a creative writing assistant. Be helpful, concise, and inspiring. Help the writer with their creative process.';
+        if (context?.projectTitle) {
+          systemPrompt += `\n\nThe writer is currently working on a project titled "${context.projectTitle}".`;
+        }
+        if (context?.chapterContent) {
+          systemPrompt += `\n\nHere is some of their recent writing for context:\n${context.chapterContent.slice(0, 2000)}`;
+        }
+
+        let aiProvider = provider || 'ollama';
+        if (!provider && typeof window !== 'undefined') {
+          const saved = localStorage.getItem('novello-settings');
+          if (saved) {
             try {
-                // Build system context
-                let systemPrompt =
-                    'You are Novello AI, a creative writing assistant. Be helpful, concise, and inspiring. Help the writer with their creative process.';
-                if (context?.projectTitle) {
-                    systemPrompt += `\n\nThe writer is currently working on a project titled "${context.projectTitle}".`;
-                }
-                if (context?.chapterContent) {
-                    systemPrompt += `\n\nHere is some of their recent writing for context:\n${context.chapterContent.slice(0, 2000)}`;
-                }
+              const parsed = JSON.parse(saved);
+              aiProvider = parsed.provider || aiProvider;
+            } catch { /* ignore */ }
+          }
+        }
 
-                // Resolve AI provider from user settings (default to ollama for local-first dev)
-                let aiProvider = 'ollama';
-                if (typeof window !== 'undefined') {
-                    const saved = localStorage.getItem('novello-settings');
-                    if (saved) {
-                        try {
-                            const parsed = JSON.parse(saved);
-                            aiProvider = parsed.provider || aiProvider;
-                        } catch { /* ignore */ }
-                    }
-                }
+        const res = await fetch('/api/ai/generate', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${user?.uid ?? 'local'}`,
+          },
+          body: JSON.stringify({
+            prompt: `${systemPrompt}\n\nUser: ${content.trim()}`,
+            provider: aiProvider,
+            model,
+            mode: 'stream',
+            projectId,
+          }),
+          signal: controller.signal,
+        });
 
-                const token = await user?.getIdToken();
-                const res = await fetch('/api/ai/generate', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: JSON.stringify({
-                        prompt: `${systemPrompt}\n\nUser: ${content.trim()}`,
-                        provider: aiProvider,
-                        mode: 'stream',
-                        projectId, // 🆕 Pass projectId for LoomEngine
-                    }),
-                    signal: controller.signal,
-                });
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error || 'AI response failed');
+        }
 
-                if (!res.ok) {
-                    const data = await res.json();
-                    throw new Error(data.error || 'AI response failed');
-                }
+        const reader = res.body?.getReader();
+        if (!reader) throw new Error('No response stream');
 
-                const reader = res.body?.getReader();
-                if (!reader) throw new Error('No response stream');
+        const decoder = new TextDecoder();
+        let accumulated = '';
+        let buffer = '';
 
-                const decoder = new TextDecoder();
-                let accumulated = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
 
-                    const chunk = decoder.decode(value, { stream: true });
-                    const lines = chunk.split('\n');
-                    for (const line of lines) {
-                        if (line.startsWith('0:')) {
-                            try {
-                                const text = JSON.parse(line.slice(2));
-                                accumulated += text;
-                                setMessages((prev) =>
-                                    prev.map((m) =>
-                                        m.id === assistantId ? { ...m, content: accumulated } : m
-                                    )
-                                );
-                            } catch {
-                                // skip invalid
-                            }
-                        }
-                    }
-                }
-            } catch (err) {
-                if ((err as Error).name === 'AbortError') {
-                    // cancelled
-                } else {
-                    const msg = err instanceof Error ? err.message : 'Chat failed';
-                    setError(msg);
-                    setMessages((prev) =>
-                        prev.map((m) =>
-                            m.id === assistantId
-                                ? { ...m, content: 'Sorry, I encountered an error. Please try again.' }
-                                : m
-                        )
-                    );
-                }
-            } finally {
-                setIsStreaming(false);
-                abortRef.current = null;
+          for (const line of lines) {
+            if (line.startsWith('0:')) {
+              try {
+                const text = JSON.parse(line.substring(2));
+                accumulated += text;
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantId ? { ...m, content: accumulated } : m
+                  )
+                );
+              } catch { /* skip invalid */ }
             }
-        },
-        [isStreaming, user, projectId]
-    );
-
-    const cancelStream = useCallback(() => {
-        abortRef.current?.abort();
+          }
+        }
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') {
+          // cancelled by user
+        } else {
+          const msg = err instanceof Error ? err.message : 'Chat failed';
+          setError(msg);
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId
+                ? { ...m, content: 'Sorry, I encountered an error. Please try again.' }
+                : m
+            )
+          );
+        }
+      } finally {
         setIsStreaming(false);
-    }, []);
+        abortRef.current = null;
+      }
+    },
+    [isStreaming, user, projectId, personaId, customPrompt, provider, model]
+  );
 
-    const clearMessages = useCallback(() => {
-        setMessages([]);
-        setError(null);
-    }, []);
+  const cancelStream = useCallback(() => {
+    abortRef.current?.abort();
+    setIsStreaming(false);
+  }, []);
 
-    return {
-        messages,
-        isStreaming,
-        error,
-        sendMessage,
-        cancelStream,
-        clearMessages,
-    };
+  const clearMessages = useCallback(() => {
+    setMessages([]);
+    setError(null);
+    if (projectId && personaId) {
+      localStorage.removeItem(CHAT_HISTORY_KEY(projectId, personaId));
+    }
+  }, [projectId, personaId]);
+
+  return { messages, isStreaming, error, sendMessage, cancelStream, clearMessages };
 }

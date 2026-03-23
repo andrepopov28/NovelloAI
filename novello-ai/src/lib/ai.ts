@@ -1,40 +1,40 @@
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import { streamText as aiStreamText, generateText as aiGenerateText, LanguageModel } from 'ai';
+import { streamText as aiStreamText, generateText as aiGenerateText, stepCountIs, LanguageModel } from 'ai';
 import { SYSTEM_PROMPT } from './prompts';
 
 // =============================================
-// Novello AI v19 — AI Service (Dual Provider)
-// Supports Ollama (local) and Gemini (cloud).
+// Novello AI — AI Service (Multi-Provider)
+// Priority cascade:
+//   1. Ollama          (local fallback, always offline-safe)
 // =============================================
 
-type AIProvider = 'ollama' | 'gemini';
+// ── Best free models per provider ─────────────────────────────────────────
+export const FREE_MODELS = {
+    ollama:     process.env.OLLAMA_MODEL || 'qwen3.5:9b',
+} as const;
 
-// --- Provider Factories ---
+export type AIProvider = 'ollama' | 'auto';
 
-function getGeminiModel(modelName: string): LanguageModel {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error('GEMINI_API_KEY is not configured');
-    const google = createGoogleGenerativeAI({ apiKey });
-    return google(modelName || 'gemini-2.0-flash');
-}
+// ── Provider factories ─────────────────────────────────────────────────────
 
-function getOllamaModel(modelName: string): LanguageModel {
+function getOllamaModel(modelName?: string): LanguageModel {
     const baseURL = process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
     const ollama = createOpenAICompatible({
         name: 'ollama',
         baseURL: `${baseURL}/v1`,
     });
-    return ollama(modelName || 'qwen2.5-coder:7b');
+    return ollama(modelName || FREE_MODELS.ollama);
 }
 
-function getModel(provider: AIProvider, modelName: string): LanguageModel {
-    return provider === 'gemini'
-        ? getGeminiModel(modelName)
-        : getOllamaModel(modelName);
+/**
+ * Resolve the best available model in priority order.
+ * If provider is 'auto', tries each in cascade order.
+ */
+export function getModel(provider: AIProvider, modelName?: string): LanguageModel {
+    return getOllamaModel(modelName);
 }
 
-// --- Health Checks ---
+// ── Health checks ──────────────────────────────────────────────────────────
 
 export async function checkOllamaHealth(): Promise<boolean> {
     const baseURL = process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
@@ -46,33 +46,45 @@ export async function checkOllamaHealth(): Promise<boolean> {
     }
 }
 
-export async function checkGeminiHealth(): Promise<boolean> {
-    return Boolean(process.env.GEMINI_API_KEY);
+export async function checkProviderHealth(): Promise<{
+    openrouter?: boolean;
+    groq?: boolean;
+    gemini?: boolean;
+    ollama: boolean;
+    active: AIProvider;
+}> {
+    const ollama = await checkOllamaHealth();
+
+    return { ollama, active: 'ollama' };
 }
 
-// --- Generation ---
+
+// ── Generation ─────────────────────────────────────────────────────────────
 
 export async function streamGenerate(options: {
     prompt: string;
-    provider: AIProvider;
-    model: string;
+    provider?: AIProvider;
+    model?: string;
     system?: string;
+    tools?: any;
 }) {
-    const model = getModel(options.provider, options.model);
+    const model = getModel(options.provider || 'auto', options.model);
     return aiStreamText({
         model,
         system: options.system || SYSTEM_PROMPT,
         prompt: options.prompt,
+        tools: options.tools,
+        stopWhen: options.tools ? stepCountIs(3) : undefined,
     });
 }
 
 export async function generateJSON(options: {
     prompt: string;
-    provider: AIProvider;
-    model: string;
+    provider?: AIProvider;
+    model?: string;
     system?: string;
 }): Promise<string> {
-    const model = getModel(options.provider, options.model);
+    const model = getModel(options.provider || 'auto', options.model);
     const result = await aiGenerateText({
         model,
         system: options.system || SYSTEM_PROMPT,

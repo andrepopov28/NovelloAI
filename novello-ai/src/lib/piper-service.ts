@@ -146,7 +146,10 @@ class PiperService {
                     quality: 'High',
                     gender: 'Neutral',
                     accent: 'Personalized',
-                    description: 'A high-fidelity clone generated from your audio sample.'
+                    description: 'A high-fidelity clone generated from your audio sample.',
+                    commercialOk: false,
+                    licenseName: 'Personal Use Only',
+                    licenseUrl: ''
                 };
                 resolve(newVoice);
             }, 3000); // 3 second simulated training

@@ -24,23 +24,17 @@ const settingsNav = [
         desc: 'Text-to-speech voices',
     },
     {
+        label: 'Agentic Team',
+        href: '/settings/ai-team',
+        image: '/settings-heroes/ai.png',
+        desc: 'Creative Personas',
+    },
+    {
         label: 'Themes',
         href: '/settings/themes',
         image: '/settings-heroes/themes.png',
         desc: 'Appearance & color',
-    },
-    {
-        label: 'Storage',
-        href: '/settings/storage',
-        image: '/settings-heroes/storage.png',
-        desc: 'Data & exports',
-    },
-    {
-        label: 'Security',
-        href: '/settings/security',
-        image: '/settings-heroes/security.png',
-        desc: 'Privacy & access',
-    },
+    }
 ];
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {

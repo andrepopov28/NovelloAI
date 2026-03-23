@@ -28,6 +28,7 @@ export function useEntities(projectId: string | null) {
 
         const unsubscribe = subscribeToEntities(
             projectId,
+            user.uid,
             (list) => {
                 setEntities(list);
                 setLoading(false);

@@ -1,468 +1,407 @@
-import {
-    collection,
-    doc,
-    addDoc,
-    updateDoc,
-    deleteDoc,
-    getDocs,
-    query,
-    where,
-    orderBy,
-    serverTimestamp,
-    writeBatch,
-    onSnapshot,
-    Unsubscribe,
-} from 'firebase/firestore';
-import { getFirebaseDb } from './firebase';
+import { 
+  getDB,
+  saveProject as dbSaveProject, 
+  getProject as dbGetProject, 
+  getAllProjects as dbGetAllProjects, 
+  deleteProject as dbDeleteProject,
+  saveChapter as dbSaveChapter,
+  getChapters as dbGetChapters,
+  deleteChapter as dbDeleteChapter,
+  saveEntity as dbSaveEntity,
+  getEntities as dbGetEntities,
+  deleteEntity as dbDeleteEntity
+} from './local-db';
 import type { Project, Chapter, Entity, ChapterVersion, Series } from './types';
-import { arrayUnion, arrayRemove } from 'firebase/firestore';
 import { computeProjectStyle } from './style-engine';
 
-// =============================================
-// Lazy Collection Accessors
-// =============================================
-const projectsCol = () => collection(getFirebaseDb(), 'projects');
-const chaptersCol = () => collection(getFirebaseDb(), 'chapters');
-const entitiesCol = () => collection(getFirebaseDb(), 'entities');
-const docRef = (colName: string, id: string) => doc(getFirebaseDb(), colName, id);
-
-// =============================================
-// Projects
-// =============================================
-
-export async function createProject(
-    userId: string,
-    data: { title: string; genre: string; synopsis: string; targetWordCount?: number; targetChapterCount?: number }
-): Promise<string> {
-    const docRef = await addDoc(projectsCol(), {
-        userId,
-        title: data.title,
-        genre: data.genre,
-        synopsis: data.synopsis,
-        seriesId: null,
-        blurb: null,
-        metadata: null,
-        wordCount: 0,
-        targetWordCount: data.targetWordCount ?? 80000,
-        targetChapterCount: data.targetChapterCount ?? 0,
-        chapterCount: 0,
-        coverImage: '',
-        settings: {
-            aiProvider: 'ollama' as const,
-            modelName: 'llama3.1:8b',
-            temperature: 0.7,
-            includeSeriesContext: false,
-        },
-        styleProfile: null,
-        contextRollup: { chapterSummaries: [], lastUpdated: serverTimestamp() },
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-    });
-
-    await createChapter(docRef.id, userId, { title: 'Chapter 1', order: 0 });
-    return docRef.id;
+// Simple EventEmitter-like pattern for subscriptions
+class LocalEventEmitter {
+  private listeners: { [key: string]: Function[] } = {};
+  
+  subscribe(event: string, callback: Function) {
+    if (!this.listeners[event]) this.listeners[event] = [];
+    this.listeners[event].push(callback);
+    return () => {
+      this.listeners[event] = this.listeners[event].filter(cb => cb !== callback);
+    };
+  }
+  
+  emit(event: string, data?: any) {
+    if (this.listeners[event]) {
+      this.listeners[event].forEach(cb => cb(data));
+    }
+  }
 }
 
-export async function updateProject(
-    projectId: string,
-    data: Partial<Omit<Project, 'id' | 'userId' | 'createdAt'>>
-): Promise<void> {
-    const ref = doc(getFirebaseDb(), 'projects', projectId);
-    await updateDoc(ref, { ...data, updatedAt: serverTimestamp() });
+const events = new LocalEventEmitter();
+
+/* ─── Project Operations ─────────────────────────────────────── */
+export async function createProject(
+  userId: string,
+  data: { title: string; genre: string; synopsis: string; targetWordCount?: number; targetChapterCount?: number }
+): Promise<string> {
+  const id = crypto.randomUUID();
+  const now = Date.now();
+  const newProject: Project = {
+    id,
+    userId,
+    title: data.title,
+    genre: data.genre,
+    synopsis: data.synopsis,
+    seriesId: null,
+    blurb: null,
+    metadata: null,
+    wordCount: 0,
+    targetWordCount: data.targetWordCount ?? 80000,
+    targetChapterCount: data.targetChapterCount ?? 0,
+    chapterCount: 0,
+    coverImage: '',
+    settings: {
+      aiProvider: 'ollama' as const,
+      modelName: 'deepseek-r1:32b',
+      temperature: 0.7,
+      includeSeriesContext: false,
+    },
+    styleProfile: null,
+    contextRollup: { chapterSummaries: [], lastUpdated: now },
+    createdAt: now,
+    updatedAt: now,
+  };
+  
+  await dbSaveProject(newProject);
+  await createChapter(id, userId, { title: 'Chapter 1', order: 0 });
+  events.emit('projects-changed');
+  return id;
+}
+
+export async function updateProject(projectId: string, data: Partial<Omit<Project, 'id' | 'userId' | 'createdAt'>>): Promise<void> {
+  const existing = await dbGetProject(projectId);
+  if (!existing) return;
+  await dbSaveProject({ ...existing, ...data, updatedAt: Date.now() });
+  events.emit('projects-changed');
+}
+
+export async function updateProjectWordCountDelta(projectId: string, delta: number): Promise<void> {
+    if (delta === 0) return;
+    const existing = await dbGetProject(projectId);
+    if (!existing) return;
+    await updateProject(projectId, { wordCount: (existing.wordCount || 0) + delta });
 }
 
 export async function deleteProject(projectId: string): Promise<void> {
-    const chaptersQuery = query(chaptersCol(), where('projectId', '==', projectId));
-    const chaptersSnapshot = await getDocs(chaptersQuery);
-
-    const entitiesQuery = query(entitiesCol(), where('projectId', '==', projectId));
-    const entitiesSnapshot = await getDocs(entitiesQuery);
-
-    const batch = writeBatch(getFirebaseDb());
-    chaptersSnapshot.docs.forEach((d) => batch.delete(d.ref));
-    entitiesSnapshot.docs.forEach((d) => batch.delete(d.ref));
-    batch.delete(doc(getFirebaseDb(), 'projects', projectId));
-
-    await batch.commit();
+  await dbDeleteProject(projectId);
+  events.emit('projects-changed');
 }
 
-export function subscribeToUserProjects(
-    userId: string,
-    callback: (projects: Project[]) => void,
-    onError: (error: Error) => void
-): Unsubscribe {
-    // Simple query without orderBy to avoid composite index requirement
-    const q = query(projectsCol(), where('userId', '==', userId));
-    return onSnapshot(
-        q,
-        (snapshot) => {
-            const projects = snapshot.docs
-                .map((d) => ({ id: d.id, ...d.data() }) as Project)
-                .sort((a, b) => {
-                    const aTime = a.updatedAt?.toMillis?.() ?? 0;
-                    const bTime = b.updatedAt?.toMillis?.() ?? 0;
-                    return bTime - aTime; // descending
-                });
-            callback(projects);
-        },
-        (err) => onError(err as Error)
-    );
+export function subscribeToUserProjects(userId: string, callback: (projects: Project[]) => void, onError: (error: Error) => void) {
+  const refresh = async () => {
+    try {
+      const projects = await dbGetAllProjects();
+      callback(projects.reverse()); // desc updated
+    } catch (e) {
+      onError(e as Error);
+    }
+  };
+  refresh();
+  return events.subscribe('projects-changed', refresh);
 }
 
-export function subscribeToSeriesProjects(
-    seriesId: string,
-    callback: (projects: Project[]) => void,
-    onError: (error: Error) => void
-): Unsubscribe {
-    const q = query(projectsCol(), where('seriesId', '==', seriesId));
-    return onSnapshot(
-        q,
-        (snapshot) => {
-            const projects = snapshot.docs
-                .map((d) => ({ id: d.id, ...d.data() }) as Project)
-                .sort((a, b) => {
-                    const aTime = a.updatedAt?.toMillis?.() ?? 0;
-                    const bTime = b.updatedAt?.toMillis?.() ?? 0;
-                    return bTime - aTime;
-                });
-            callback(projects);
-        },
-        (err) => onError(err as Error)
-    );
-}
-
-// =============================================
-// Chapters
-// =============================================
-
+/* ─── Chapter Operations ─────────────────────────────────────── */
 export async function createChapter(
-    projectId: string,
-    userId: string,
-    data: { title: string; order: number; content?: string }
+  projectId: string,
+  userId: string,
+  data: { title: string; order: number; content?: string }
 ): Promise<string> {
-    const ref = await addDoc(chaptersCol(), {
-        projectId,
-        userId,
-        title: data.title,
-        order: data.order,
-        content: data.content || '',
-        synopsis: '',
-        status: 'draft' as const,
-        lastSummary: '',
-        wordCount: 0,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-    });
-    return ref.id;
+  const id = crypto.randomUUID();
+  const now = Date.now();
+  const newChapter: Chapter = {
+    id,
+    projectId,
+    userId,
+    title: data.title,
+    order: data.order,
+    content: data.content || '',
+    synopsis: '',
+    status: 'draft' as const,
+    lastSummary: '',
+    wordCount: 0,
+    createdAt: now,
+    updatedAt: now,
+  };
+  await dbSaveChapter(newChapter);
+  events.emit(`chapters-changed-${projectId}`);
+  return id;
 }
 
-export async function updateChapter(
-    chapterId: string,
-    data: Partial<Omit<Chapter, 'id' | 'userId' | 'projectId' | 'createdAt'>>
-): Promise<void> {
-    const ref = doc(getFirebaseDb(), 'chapters', chapterId);
-    await updateDoc(ref, { ...data, updatedAt: serverTimestamp() });
+export async function updateChapter(chapterId: string, data: Partial<Omit<Chapter, 'id' | 'userId' | 'projectId' | 'createdAt'>>): Promise<void> {
+  const db = await getDB();
+  const existing = await db.get('chapters', chapterId);
+  if (!existing) return;
+  const updated = { ...existing, ...data, updatedAt: Date.now() };
+  await db.put('chapters', updated);
+  events.emit(`chapters-changed-${existing.projectId}`);
 }
 
 export async function deleteChapter(chapterId: string): Promise<void> {
-    await deleteDoc(doc(getFirebaseDb(), 'chapters', chapterId));
+  const db = await getDB();
+  const existing = await db.get('chapters', chapterId);
+  if (!existing) return;
+  await dbDeleteChapter(chapterId);
+  events.emit(`chapters-changed-${existing.projectId}`);
 }
 
-export async function reorderChapters(
-    projectId: string,
-    orderedIds: string[]
-): Promise<void> {
-    const batch = writeBatch(getFirebaseDb());
-    orderedIds.forEach((id, index) => {
-        batch.update(doc(getFirebaseDb(), 'chapters', id), {
-            order: index,
-            updatedAt: serverTimestamp(),
-        });
-    });
-    await batch.commit();
+export function subscribeToChapters(projectId: string, userId: string, callback: (chapters: Chapter[]) => void, onError: (error: Error) => void) {
+  const refresh = async () => {
+    try {
+      const chapters = await dbGetChapters(projectId);
+      callback(chapters.sort((a,b) => (a.order || 0) - (b.order || 0)));
+    } catch (e) {
+      onError(e as Error);
+    }
+  };
+  refresh();
+  return events.subscribe(`chapters-changed-${projectId}`, refresh);
 }
 
-export function subscribeToChapters(
-    projectId: string,
-    callback: (chapters: Chapter[]) => void,
-    onError: (error: Error) => void
-): Unsubscribe {
-    const q = query(chaptersCol(), where('projectId', '==', projectId));
-    return onSnapshot(
-        q,
-        (snapshot) => {
-            const chapters = snapshot.docs
-                .map((d) => ({ id: d.id, ...d.data() }) as Chapter)
-                .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-            callback(chapters);
-        },
-        (err) => onError(err as Error)
-    );
+/* ─── Entity Operations ──────────────────────────────────────── */
+export async function createEntity(projectId: string, userId: string, data: { name: string; type: Entity['type']; description: string }): Promise<string> {
+  const id = crypto.randomUUID();
+  const now = Date.now();
+  const newEntity: Entity = {
+    id,
+    projectId,
+    userId,
+    name: data.name,
+    type: data.type,
+    description: data.description,
+    appearance: '',
+    motivations: '',
+    lore: '',
+    appearances: [],
+    relationships: [],
+    isShared: false,
+    createdAt: now,
+    updatedAt: now,
+  };
+  await dbSaveEntity(newEntity);
+  events.emit(`entities-changed-${projectId}`);
+  return id;
 }
 
-// =============================================
-// Versions
-// =============================================
-const versionsCol = (chapterId: string) => collection(getFirebaseDb(), 'chapters', chapterId, 'versions');
-
-export async function saveVersion(
-    chapterId: string,
-    userId: string,
-    content: string,
-    source: ChapterVersion['source'] = 'autosave'
-): Promise<string> {
-    // 1. Get word count
-    const text = content.replace(/<[^>]*>/g, ' ');
-    const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
-
-    const ref = await addDoc(versionsCol(chapterId), {
-        chapterId,
-        userId,
-        content,
-        wordCount,
-        source,
-        isPinned: false,
-        createdAt: serverTimestamp(),
-    });
-    return ref.id;
-}
-
-export function subscribeToVersions(
-    chapterId: string,
-    callback: (versions: ChapterVersion[]) => void,
-    onError: (error: Error) => void
-): Unsubscribe {
-    const q = query(versionsCol(chapterId), orderBy('createdAt', 'desc'));
-    return onSnapshot(
-        q,
-        (snapshot) => {
-            const versions = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as ChapterVersion);
-            callback(versions);
-        },
-        (err) => onError(err as Error)
-    );
-}
-
-// =============================================
-// Entities
-// =============================================
-
-export async function createEntity(
-    projectId: string,
-    userId: string,
-    data: { name: string; type: Entity['type']; description: string }
-): Promise<string> {
-    const ref = await addDoc(entitiesCol(), {
-        projectId,
-        userId,
-        name: data.name,
-        type: data.type,
-        description: data.description,
-        appearance: '',
-        motivations: '',
-        lore: '',
-        appearances: [],
-        relationships: [],
-        isShared: false,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-    });
-    return ref.id;
-}
-
-export async function updateEntity(
-    entityId: string,
-    data: Partial<Omit<Entity, 'id' | 'userId' | 'projectId' | 'createdAt'>>
-): Promise<void> {
-    const ref = doc(getFirebaseDb(), 'entities', entityId);
-    await updateDoc(ref, { ...data, updatedAt: serverTimestamp() });
+export async function updateEntity(entityId: string, data: Partial<Omit<Entity, 'id' | 'userId' | 'projectId' | 'createdAt'>>): Promise<void> {
+    const db = await getDB();
+    const existing = await db.get('entities', entityId);
+    if (!existing) return;
+    await db.put('entities', { ...existing, ...data, updatedAt: Date.now() });
+    events.emit(`entities-changed-${existing.projectId}`);
 }
 
 export async function deleteEntity(entityId: string): Promise<void> {
-    await deleteDoc(doc(getFirebaseDb(), 'entities', entityId));
+    const db = await getDB();
+    const existing = await db.get('entities', entityId);
+    if (!existing) return;
+    await dbDeleteEntity(entityId);
+    events.emit(`entities-changed-${existing.projectId}`);
 }
 
-export function subscribeToEntities(
-    projectId: string,
-    callback: (entities: Entity[]) => void,
-    onError: (error: Error) => void
-): Unsubscribe {
-    const q = query(entitiesCol(), where('projectId', '==', projectId));
-    return onSnapshot(
-        q,
-        (snapshot) => {
-            const entities = snapshot.docs
-                .map((d) => ({ id: d.id, ...d.data() }) as Entity)
-                .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
-            callback(entities);
-        },
-        (err) => onError(err as Error)
-    );
+export function subscribeToEntities(projectId: string, userId: string, callback: (entities: Entity[]) => void, onError: (error: Error) => void) {
+  const refresh = async () => {
+    try {
+      const entities = await dbGetEntities(projectId);
+      callback(entities.sort((a,b) => (a.name || '').localeCompare(b.name || '')));
+    } catch (e) {
+      onError(e as Error);
+    }
+  };
+  refresh();
+  return events.subscribe(`entities-changed-${projectId}`, refresh);
 }
 
-// =============================================
-// Aggregate Helpers
-// =============================================
-
+/* ─── Aggregate Helpers ──────────────────────────────────────── */
 export async function recalculateProjectWordCount(projectId: string): Promise<void> {
-    const q = query(chaptersCol(), where('projectId', '==', projectId));
-    const snapshot = await getDocs(q);
-    const totalWords = snapshot.docs.reduce((sum, d) => {
-        const content = d.data().content || '';
-        // Basic word count on HTML content
+    const chapters = await dbGetChapters(projectId);
+    const totalWords = chapters.reduce((sum, d) => {
+        const content = d.content || '';
         const text = content.replace(/<[^>]*>/g, ' ');
         return sum + (text.trim() ? text.trim().split(/\s+/).length : 0);
     }, 0);
     await updateProject(projectId, { wordCount: totalWords });
 }
 
-export async function recalculateProjectStyle(projectId: string): Promise<void> {
-    const q = query(chaptersCol(), where('projectId', '==', projectId));
-    const snapshot = await getDocs(q);
-    const chapters = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Chapter);
-
-    // Compute style profile
-    const styleProfile = computeProjectStyle(chapters);
-
-    if (styleProfile) {
-        await updateProject(projectId, { styleProfile });
-    }
-}
-
-// =============================================
-// Series
-// =============================================
-const seriesCol = () => collection(getFirebaseDb(), 'series');
-
-export async function createSeries(
-    userId: string,
-    data: { title: string; description: string }
-): Promise<string> {
-    const ref = await addDoc(seriesCol(), {
+/* ─── Series Operations ──────────────────────────────────────── */
+export async function createSeries(userId: string, data: { title: string; description: string }): Promise<string> {
+    const db = await getDB();
+    const id = crypto.randomUUID();
+    const now = Date.now();
+    const newSeries: Series = {
+        id,
         userId,
         title: data.title,
         description: data.description,
         projectIds: [],
         sharedEntityIds: [],
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-    });
-    return ref.id;
+        createdAt: now,
+        updatedAt: now,
+    };
+    await db.put('series', newSeries);
+    events.emit('series-changed');
+    return id;
 }
 
-export async function updateSeries(
-    seriesId: string,
-    data: Partial<Omit<Series, 'id' | 'userId' | 'createdAt'>>
-): Promise<void> {
-    const ref = doc(getFirebaseDb(), 'series', seriesId);
-    await updateDoc(ref, { ...data, updatedAt: serverTimestamp() });
+export function subscribeToUserSeries(userId: string, callback: (series: Series[]) => void, onError: (error: Error) => void) {
+  const refresh = async () => {
+    try {
+      const db = await getDB();
+      const list = await db.getAllFromIndex('series', 'by-updated');
+      callback(list.reverse());
+    } catch (e) {
+      onError(e as Error);
+    }
+  };
+  refresh();
+  return events.subscribe('series-changed', refresh);
+}
+
+// Stubs for complex batch operations not strictly needed for basic local functionality
+export async function reorderChapters(projectId: string, orderedIds: string[]): Promise<void> {
+    const db = await getDB();
+    const tx = db.transaction('chapters', 'readwrite');
+    for (const [index, id] of orderedIds.entries()) {
+        const existing = await tx.store.get(id);
+        if (existing) {
+            await tx.store.put({ ...existing, order: index, updatedAt: Date.now() });
+        }
+    }
+    await tx.done;
+    events.emit(`chapters-changed-${projectId}`);
+}
+
+// Other stubs...
+export function subscribeToProject(projectId: string, callback: (project: Project | null) => void, onError: (error: Error) => void) {
+    const refresh = async () => {
+        try {
+            const p = await dbGetProject(projectId);
+            callback(p || null);
+        } catch (e) {
+            onError(e as Error);
+        }
+    };
+    refresh();
+    return events.subscribe('projects-changed', refresh);
+}
+
+export function subscribeToSeries(seriesId: string, callback: (series: Series | null) => void, onError: (error: Error) => void) {
+    const refresh = async () => {
+        try {
+            const db = await getDB();
+            const s = await db.get('series', seriesId);
+            callback(s || null);
+        } catch (e) {
+            onError(e as Error);
+        }
+    };
+    refresh();
+    return events.subscribe('series-changed', refresh);
+}
+
+/* ─── Series Management ──────────────────────────────────────── */
+
+export async function updateSeries(seriesId: string, data: Partial<Series>): Promise<void> {
+    const db = await getDB();
+    const existing = await db.get('series', seriesId);
+    if (!existing) return;
+    await db.put('series', { ...existing, ...data, updatedAt: Date.now() });
+    events.emit('series-changed');
 }
 
 export async function deleteSeries(seriesId: string): Promise<void> {
-    const db = getFirebaseDb();
-    const batch = writeBatch(db);
-
-    // 1. Fetch the series document to get sharedEntityIds
-    const seriesRef = doc(db, 'series', seriesId);
-    const { getDoc } = await import('firebase/firestore');
-    const seriesSnap = await getDoc(seriesRef);
-
-    if (seriesSnap.exists()) {
-        const seriesData = seriesSnap.data() as Omit<Series, 'id'>;
-
-        // 2. Unshare entities (PRD cascade rule D.2)
-        if (seriesData.sharedEntityIds && seriesData.sharedEntityIds.length > 0) {
-            for (const entityId of seriesData.sharedEntityIds) {
-                const entityRef = doc(db, 'entities', entityId);
-                batch.update(entityRef, { isShared: false, updatedAt: serverTimestamp() });
-            }
-        }
-    }
-
-    // 3. Unlink projects from series
-    const projectsQuery = query(projectsCol(), where('seriesId', '==', seriesId));
-    const projectsSnapshot = await getDocs(projectsQuery);
-    projectsSnapshot.docs.forEach((d) => {
-        batch.update(d.ref, { seriesId: null, updatedAt: serverTimestamp() });
-    });
-
-    // 4. Delete Series Doc
-    batch.delete(seriesRef);
-
-    await batch.commit();
+    const db = await getDB();
+    await db.delete('series', seriesId);
+    events.emit('series-changed');
 }
-
-// Series type imported at top of file
-
-export function subscribeToSeries(
-    seriesId: string,
-    callback: (series: Series | null) => void,
-    onError: (error: Error) => void
-): Unsubscribe {
-    const ref = doc(getFirebaseDb(), 'series', seriesId);
-    return onSnapshot(
-        ref,
-        (snapshot) => {
-            if (snapshot.exists()) {
-                callback({ id: snapshot.id, ...snapshot.data() } as Series);
-            } else {
-                callback(null);
-            }
-        },
-        (err) => onError(err as Error)
-    );
-}
-
-export function subscribeToUserSeries(
-    userId: string,
-    callback: (series: Series[]) => void,
-    onError: (error: Error) => void
-): Unsubscribe {
-    const q = query(seriesCol(), where('userId', '==', userId));
-    return onSnapshot(
-        q,
-        (snapshot) => {
-            const list = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Series);
-            // Sort by updatedAt desc
-            list.sort((a, b) => (b.updatedAt?.toMillis?.() || 0) - (a.updatedAt?.toMillis?.() || 0));
-            callback(list);
-        },
-        (err) => onError(err as Error)
-    );
-}
-
-// arrayUnion/arrayRemove imported at top of file
 
 export async function addProjectToSeries(seriesId: string, projectId: string): Promise<void> {
-    const batch = writeBatch(getFirebaseDb());
-    const seriesRef = doc(getFirebaseDb(), 'series', seriesId);
-    const projectRef = doc(getFirebaseDb(), 'projects', projectId);
-
-    batch.update(seriesRef, {
-        projectIds: arrayUnion(projectId),
-        updatedAt: serverTimestamp()
-    });
-    batch.update(projectRef, {
-        seriesId: seriesId,
-        updatedAt: serverTimestamp()
-    });
-
-    await batch.commit();
+    const db = await getDB();
+    const existing = await db.get('series', seriesId);
+    if (!existing) return;
+    const projectIds = Array.from(new Set([...(existing.projectIds || []), projectId]));
+    await db.put('series', { ...existing, projectIds, updatedAt: Date.now() });
+    events.emit('series-changed');
 }
 
 export async function removeProjectFromSeries(seriesId: string, projectId: string): Promise<void> {
-    const batch = writeBatch(getFirebaseDb());
-    const seriesRef = doc(getFirebaseDb(), 'series', seriesId);
-    const projectRef = doc(getFirebaseDb(), 'projects', projectId);
-
-    batch.update(seriesRef, {
-        projectIds: arrayRemove(projectId),
-        updatedAt: serverTimestamp()
-    });
-    batch.update(projectRef, {
-        seriesId: null,
-        updatedAt: serverTimestamp()
-    });
-
-    await batch.commit();
+    const db = await getDB();
+    const existing = await db.get('series', seriesId);
+    if (!existing) return;
+    const projectIds = (existing.projectIds || []).filter((id: string) => id !== projectId);
+    await db.put('series', { ...existing, projectIds, updatedAt: Date.now() });
+    events.emit('series-changed');
 }
+
+export function subscribeToSeriesProjects(seriesId: string, callback: (projects: Project[]) => void, onError: (error: Error) => void) {
+    const refresh = async () => {
+        try {
+            const db = await getDB();
+            const series = await db.get('series', seriesId);
+            if (!series?.projectIds?.length) { callback([]); return; }
+            const projects = await Promise.all(
+                series.projectIds.map((id: string) => dbGetProject(id))
+            );
+            callback(projects.filter(Boolean) as Project[]);
+        } catch (e) {
+            onError(e as Error);
+        }
+    };
+    refresh();
+    return events.subscribe('series-changed', refresh);
+}
+
+/* ─── Version History ────────────────────────────────────────── */
+
+interface LocalVersion {
+    id: string;
+    projectId: string;
+    chapterId: string;
+    userId: string;
+    content: string;
+    wordCount: number;
+    createdAt: number;
+    source: 'autosave' | 'manual' | 'ai-generation' | 'import';
+    isPinned: boolean;
+    label?: string;
+}
+
+const VERSIONS_KEY = (chapterId: string) => `novello_versions_${chapterId}`;
+
+export async function saveVersion(chapterId: string, projectId: string, content: string, label?: string): Promise<string> {
+    const id = crypto.randomUUID();
+    const version: LocalVersion = {
+        id, projectId, chapterId, content,
+        userId: 'local',
+        source: 'manual',
+        isPinned: false,
+        wordCount: content.replace(/<[^>]+>/g, '').split(/\s+/).filter(Boolean).length,
+        createdAt: Date.now(),
+        label,
+    };
+    try {
+        const stored = localStorage.getItem(VERSIONS_KEY(chapterId));
+        const versions: LocalVersion[] = stored ? JSON.parse(stored) : [];
+        versions.unshift(version);
+        // Keep last 20 versions per chapter
+        localStorage.setItem(VERSIONS_KEY(chapterId), JSON.stringify(versions.slice(0, 20)));
+    } catch { /* ignore storage errors */ }
+    return id;
+}
+
+export function subscribeToVersions(chapterId: string, callback: (versions: LocalVersion[]) => void, onError: (error: Error) => void) {
+    try {
+        const stored = localStorage.getItem(VERSIONS_KEY(chapterId));
+        callback(stored ? JSON.parse(stored) : []);
+    } catch (e) {
+        onError(e as Error);
+    }
+    // Return a no-op unsubscribe since localStorage doesn't have listeners
+    return () => {};
+}
+

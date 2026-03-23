@@ -1,18 +1,12 @@
-'use client';
+import { Suspense } from 'react';
+export const dynamic = 'force-dynamic';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import SettingsRedirect from '@/components/settings/SettingsRedirect';
 
 export default function SettingsPage() {
-    const router = useRouter();
-
-    useEffect(() => {
-        router.replace('/settings/profile');
-    }, [router]);
-
     return (
-        <div className="flex items-center justify-center p-20">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent-warm"></div>
-        </div>
+        <Suspense fallback={<div className="p-20 flex items-center justify-center animate-spin rounded-full h-8 w-8 border-b-2 border-accent-warm"></div>}>
+            <SettingsRedirect />
+        </Suspense>
     );
 }

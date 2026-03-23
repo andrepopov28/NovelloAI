@@ -86,7 +86,7 @@ export function VersionHistory({
                     <div className="space-y-3">
                         {versions.map((version) => {
                             const { label, color } = getSourceLabel(version.source);
-                            const date = version.createdAt?.toDate ? version.createdAt.toDate() : new Date();
+                            const date = version.createdAt ? new Date(version.createdAt) : new Date();
 
                             return (
                                 <div

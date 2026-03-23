@@ -29,6 +29,7 @@ export function useChapters(projectId: string | null) {
 
         const unsubscribe = subscribeToChapters(
             projectId,
+            user.uid,
             (list) => {
                 setChapters(list);
                 setLoading(false);
