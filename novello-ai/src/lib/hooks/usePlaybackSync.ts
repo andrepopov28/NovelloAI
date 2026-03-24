@@ -1,113 +1,102 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { getFirebaseDb } from '@/lib/firebase';
-import { doc, getDoc, setDoc, Timestamp, collection, query, onSnapshot, deleteDoc } from '@/lib/firebase';
 import type { Bookmark } from '@/lib/types';
 import { toast } from 'sonner';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Local-first playback sync using localStorage
+// Stores playback position, speed, and bookmarks per export.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const positionKey = (userId: string, exportId: string) => `novello_pb_${userId}_${exportId}`;
+const bookmarksKey = (userId: string, exportId: string) => `novello_bm_${userId}_${exportId}`;
+
+interface PlaybackState {
+    positionMs: number;
+    speed: number;
+    updatedAt: number;
+}
+
+function readPlaybackState(userId: string, exportId: string): PlaybackState | null {
+    try {
+        const raw = localStorage.getItem(positionKey(userId, exportId));
+        return raw ? JSON.parse(raw) : null;
+    } catch {
+        return null;
+    }
+}
+
+function writePlaybackState(userId: string, exportId: string, state: PlaybackState): void {
+    try {
+        localStorage.setItem(positionKey(userId, exportId), JSON.stringify(state));
+    } catch { /* ignore quota errors */ }
+}
+
+function readBookmarks(userId: string, exportId: string): Bookmark[] {
+    try {
+        const raw = localStorage.getItem(bookmarksKey(userId, exportId));
+        return raw ? JSON.parse(raw) : [];
+    } catch {
+        return [];
+    }
+}
+
+function writeBookmarks(userId: string, exportId: string, bookmarks: Bookmark[]): void {
+    try {
+        localStorage.setItem(bookmarksKey(userId, exportId), JSON.stringify(bookmarks));
+    } catch { /* ignore quota errors */ }
+}
 
 export function usePlaybackSync(userId: string | undefined, exportId: string | undefined) {
     const [initialPositionMs, setInitialPositionMs] = useState<number>(0);
     const [initialSpeed, setInitialSpeed] = useState<number>(1);
     const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
     const lastSyncRef = useRef<number>(0);
-    // Guard: prevent syncPosition from overwriting the cloud-saved position
-    // before the async initial-fetch has had a chance to resolve.
     const isInitialisedRef = useRef<boolean>(false);
 
-    // Initial state fetch
+    // Initial state fetch from localStorage
     useEffect(() => {
         if (!userId || !exportId) return;
-        const fetchInitial = async () => {
-            const db = getFirebaseDb();
-            const docRef = doc(db, `users/${userId}/playback/${exportId}`);
-            try {
-                const snap = await getDoc(docRef);
-                if (snap.exists()) {
-                    const data = snap.data();
-                    if (data.positionMs !== undefined) setInitialPositionMs(data.positionMs);
-                    if (data.speed !== undefined) setInitialSpeed(data.speed);
-                }
-            } catch (e) {
-                console.warn('Failed to fetch initial playback state', e);
-            } finally {
-                // Only allow syncPosition writes after this point
-                isInitialisedRef.current = true;
-            }
-        };
-        fetchInitial();
+        const state = readPlaybackState(userId, exportId);
+        if (state) {
+            setInitialPositionMs(state.positionMs);
+            setInitialSpeed(state.speed);
+        }
+        const saved = readBookmarks(userId, exportId);
+        setBookmarks(saved.sort((a, b) => a.positionMs - b.positionMs));
+        isInitialisedRef.current = true;
     }, [userId, exportId]);
 
-    // Bookmarks listener
-    useEffect(() => {
-        if (!userId || !exportId) return;
-        const db = getFirebaseDb();
-        const q = query(collection(db, `users/${userId}/bookmarks/${exportId}/items`));
-
-        const unsubscribe = onSnapshot(q, (snap) => {
-            const docs = snap.docs.map(d => ({ id: d.id, ...d.data() } as Bookmark));
-            docs.sort((a, b) => a.positionMs - b.positionMs);
-            setBookmarks(docs);
-        }, (err) => {
-            console.error('Bookmarks listener error', err);
-        });
-
-        return () => unsubscribe();
-    }, [userId, exportId]);
-
-    const syncPosition = useCallback(async (positionMs: number, speed: number, force = false) => {
-        if (!userId || !exportId) return;
-        // Do not sync until we have loaded the remote initial state
-        if (!isInitialisedRef.current) return;
-
+    const syncPosition = useCallback((positionMs: number, speed: number, force = false) => {
+        if (!userId || !exportId || !isInitialisedRef.current) return;
         const now = Date.now();
-        if (!force && now - lastSyncRef.current < 5000) return; // Max 1 sync per 5 seconds unless forced
-
+        if (!force && now - lastSyncRef.current < 5000) return;
         lastSyncRef.current = now;
-        const db = getFirebaseDb();
-        const docRef = doc(db, `users/${userId}/playback/${exportId}`);
-
-        try {
-            await setDoc(docRef, {
-                id: exportId,
-                userId,
-                positionMs,
-                speed,
-                updatedAt: Timestamp.now(),
-                lastPlayedAt: Timestamp.now()
-            }, { merge: true });
-        } catch (e) {
-            console.warn('Failed to sync playback state', e);
-        }
+        writePlaybackState(userId, exportId, { positionMs, speed, updatedAt: now });
     }, [userId, exportId]);
 
-    const addBookmark = useCallback(async (positionMs: number, label: string) => {
+    const addBookmark = useCallback((positionMs: number, label: string) => {
         if (!userId || !exportId) return;
-        const db = getFirebaseDb();
-        const bookmarkRef = doc(collection(db, `users/${userId}/bookmarks/${exportId}/items`));
-        try {
-            await setDoc(bookmarkRef, {
-                id: bookmarkRef.id,
-                exportId,
-                userId,
-                positionMs,
-                label,
-                createdAt: Timestamp.now()
-            });
-            toast.success('Bookmark saved!');
-        } catch (e) {
-            toast.error('Failed to save bookmark.');
-        }
-    }, [userId, exportId]);
+        const id = crypto.randomUUID();
+        const newBookmark: Bookmark = {
+            id,
+            exportId,
+            userId,
+            positionMs,
+            label,
+            createdAt: Date.now(),
+        };
+        const updated = [...bookmarks, newBookmark].sort((a, b) => a.positionMs - b.positionMs);
+        setBookmarks(updated);
+        writeBookmarks(userId, exportId, updated);
+        toast.success('Bookmark saved!');
+    }, [userId, exportId, bookmarks]);
 
-    const removeBookmark = useCallback(async (bookmarkId: string) => {
+    const removeBookmark = useCallback((bookmarkId: string) => {
         if (!userId || !exportId) return;
-        const db = getFirebaseDb();
-        const bookmarkRef = doc(db, `users/${userId}/bookmarks/${exportId}/items/${bookmarkId}`);
-        try {
-            await deleteDoc(bookmarkRef);
-        } catch (e) {
-            toast.error('Failed to delete bookmark.');
-        }
-    }, [userId, exportId]);
+        const updated = bookmarks.filter((b) => b.id !== bookmarkId);
+        setBookmarks(updated);
+        writeBookmarks(userId, exportId, updated);
+    }, [userId, exportId, bookmarks]);
 
     return {
         initialPositionMs,
@@ -115,6 +104,6 @@ export function usePlaybackSync(userId: string | undefined, exportId: string | u
         bookmarks,
         syncPosition,
         addBookmark,
-        removeBookmark
+        removeBookmark,
     };
 }

@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { getProject, getChapters } from '@/lib/local-db';
 
 export interface PublishMetadata {
     author: string;
@@ -32,7 +33,15 @@ export function usePublish() {
             setExporting(true);
             setExportError(null);
             try {
-                // ✅ FIX: Include Authorization header (was missing — caused 401)
+                // Fetch project + chapters from local IndexedDB on the client
+                const [project, chapters] = await Promise.all([
+                    getProject(projectId),
+                    getChapters(projectId),
+                ]);
+
+                if (!project) throw new Error('Project not found in local database');
+                if (!chapters || chapters.length === 0) throw new Error('No chapters found to export');
+
                 const token = user?.uid ?? 'local';
                 const res = await fetch('/api/export/epub', {
                     method: 'POST',
@@ -40,7 +49,8 @@ export function usePublish() {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}`,
                     },
-                    body: JSON.stringify({ projectId }),
+                    // Send the data the server needs — no Firestore reads required
+                    body: JSON.stringify({ project, chapters }),
                 });
                 if (!res.ok) {
                     const data = await res.json();
@@ -50,7 +60,7 @@ export function usePublish() {
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                const safeName = (projectTitle || 'manuscript').replace(/[^a-zA-Z0-9\s\-_]/g, '').trim() || 'manuscript';
+                const safeName = (projectTitle || project.title || 'manuscript').replace(/[^a-zA-Z0-9\s\-_]/g, '').trim() || 'manuscript';
                 a.download = `${safeName}.epub`;
                 a.click();
                 URL.revokeObjectURL(url);
@@ -68,12 +78,24 @@ export function usePublish() {
             setExporting(true);
             setExportError(null);
             try {
-                // ✅ FIX: Include Authorization header (was missing — caused 401)
+                // Fetch project + chapters from local IndexedDB on the client
+                const [project, chapters] = await Promise.all([
+                    getProject(projectId),
+                    getChapters(projectId),
+                ]);
+
+                if (!project) throw new Error('Project not found in local database');
+                if (!chapters || chapters.length === 0) throw new Error('No chapters found to export');
+
                 const token = user?.uid ?? 'local';
-                const res = await fetch(`/api/export/pdf?projectId=${projectId}`, {
+                const res = await fetch('/api/export/pdf', {
+                    method: 'POST',
                     headers: {
+                        'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}`,
                     },
+                    // Send the data the server needs — no Firestore reads required
+                    body: JSON.stringify({ project, chapters }),
                 });
                 if (!res.ok) {
                     const data = await res.json();
@@ -83,7 +105,7 @@ export function usePublish() {
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                const safeName = (projectTitle || 'manuscript').replace(/[^a-zA-Z0-9\s\-_]/g, '').trim() || 'manuscript';
+                const safeName = (projectTitle || project.title || 'manuscript').replace(/[^a-zA-Z0-9\s\-_]/g, '').trim() || 'manuscript';
                 a.download = `${safeName}.html`;
                 a.click();
                 URL.revokeObjectURL(url);

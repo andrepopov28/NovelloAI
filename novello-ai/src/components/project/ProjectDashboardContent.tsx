@@ -95,10 +95,17 @@ export function ProjectDashboardContent({ projectId }: { projectId: string }) {
         try {
             toast.info('Generating HTML for PDF print…');
             const token = user?.uid ?? 'local';
-            const res = await fetch(`/api/export/pdf?projectId=${projectId}`, {
+            const project = projects.find((p) => p.id === projectId);
+            if (!project) throw new Error('Project not found');
+            if (chapters.length === 0) throw new Error('No chapters to export');
+
+            const res = await fetch('/api/export/pdf', {
+                method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${token}`
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
                 },
+                body: JSON.stringify({ project, chapters }),
             });
 
             if (!res.ok) {
@@ -110,7 +117,8 @@ export function ProjectDashboardContent({ projectId }: { projectId: string }) {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `manuscript-${projectId}.html`; // The route returns HTML for "Print to PDF"
+            const safeName = (project.title || 'manuscript').replace(/[^a-zA-Z0-9\s\-_]/g, '').trim() || 'manuscript';
+            a.download = `${safeName}.html`;
             a.click();
             URL.revokeObjectURL(url);
             toast.success('Export generated! Open the file and Print to PDF.');
@@ -118,19 +126,23 @@ export function ProjectDashboardContent({ projectId }: { projectId: string }) {
             console.error('PDF export failed:', err);
             toast.error('PDF export failed. Please try again.');
         }
-    }, [projectId, user]);
+    }, [projectId, projects, chapters, user]);
 
     const handleExportEpub = useCallback(async () => {
         try {
             toast.info('Generating EPUB…');
             const token = user?.uid ?? 'local';
+            const project = projects.find((p) => p.id === projectId);
+            if (!project) throw new Error('Project not found');
+            if (chapters.length === 0) throw new Error('No chapters to export');
+
             const res = await fetch('/api/export/epub', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
+                    'Authorization': `Bearer ${token}`,
                 },
-                body: JSON.stringify({ projectId }),
+                body: JSON.stringify({ project, chapters }),
             });
 
             if (!res.ok) {
@@ -142,7 +154,8 @@ export function ProjectDashboardContent({ projectId }: { projectId: string }) {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'manuscript.epub';
+            const safeName = (project.title || 'manuscript').replace(/[^a-zA-Z0-9\s\-_]/g, '').trim() || 'manuscript';
+            a.download = `${safeName}.epub`;
             a.click();
             URL.revokeObjectURL(url);
             toast.success('EPUB exported successfully!');
@@ -150,7 +163,7 @@ export function ProjectDashboardContent({ projectId }: { projectId: string }) {
             console.error('EPUB export failed:', err);
             toast.error('EPUB export failed. Please try again.');
         }
-    }, [projectId, user]);
+    }, [projectId, projects, chapters, user]);
 
     const handleSaveSnapshot = useCallback(async () => {
         if (!activeChapterId || !user) return;
@@ -178,13 +191,14 @@ export function ProjectDashboardContent({ projectId }: { projectId: string }) {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
+                    'Authorization': `Bearer ${token}`,
                 },
-                body: JSON.stringify({ projectId }),
+                // Pass IndexedDB data directly — server has no Firestore access in local mode
+                body: JSON.stringify({ chapters, entities }),
             });
             const data = await res.json();
             if (res.ok) {
-                toast.success(`Entity tracing complete. ${data.traced} updated.`);
+                toast.success(`Entity tracing complete. ${data.traced} entities updated.`);
             } else {
                 throw new Error(data.error);
             }
@@ -194,7 +208,7 @@ export function ProjectDashboardContent({ projectId }: { projectId: string }) {
         } finally {
             setTracing(false);
         }
-    }, [projectId, user]);
+    }, [chapters, entities, user]);
 
     const handleSummarize = useCallback(async () => {
         toast.info('Building chapter summaries…');

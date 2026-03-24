@@ -58,17 +58,19 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
     if (!user) return null;
 
     return (
-        <ActiveProjectProvider>
-            <ErrorBoundary>
-                <GlobalNav />
-                <main className="flex-1 overflow-auto relative p-6">
-                    <Suspense fallback={<div className="p-8 text-center text-secondary">Loading...</div>}>
-                        {children}
-                    </Suspense>
-                </main>
-                <AIChatbox />
-                <ProjectLedger />
-            </ErrorBoundary>
-        </ActiveProjectProvider>
+        <ThemeProvider>
+            <ActiveProjectProvider>
+                <ErrorBoundary>
+                    <GlobalNav />
+                    <main className="flex-1 overflow-auto relative p-6">
+                        <Suspense fallback={<div className="p-8 text-center text-secondary">Loading...</div>}>
+                            {children}
+                        </Suspense>
+                    </main>
+                    <AIChatbox />
+                    <ProjectLedger />
+                </ErrorBoundary>
+            </ActiveProjectProvider>
+        </ThemeProvider>
     );
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { audiobookQueue } from '@/lib/queue/audiobookQueue';
+import { verifyIdToken } from '@/lib/firebase-admin';
 import { z } from 'zod';
 import crypto from 'crypto';
 
@@ -16,7 +17,8 @@ const AudiobookRequestSchema = z.object({
 export async function POST(req: Request) {
     try {
         const authHeader = req.headers.get('Authorization');
-        const uid = authHeader?.replace('Bearer ', '') || 'local';
+        const decoded = await verifyIdToken(authHeader);
+        const uid = decoded.uid;
 
         let body;
         try {

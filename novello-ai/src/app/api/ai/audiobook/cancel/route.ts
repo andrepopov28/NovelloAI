@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { audiobookQueue } from '@/lib/queue/audiobookQueue';
+import { verifyIdToken } from '@/lib/firebase-admin';
 import { z } from 'zod';
 
 const CancelRequestSchema = z.object({
@@ -9,7 +10,7 @@ const CancelRequestSchema = z.object({
 export async function POST(req: Request) {
     try {
         const authHeader = req.headers.get('Authorization');
-        const uid = authHeader?.replace('Bearer ', '') || 'local';
+        await verifyIdToken(authHeader);
 
         let body;
         try {

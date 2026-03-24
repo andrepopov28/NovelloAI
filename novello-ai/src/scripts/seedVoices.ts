@@ -1,6 +1,14 @@
-import { db } from '@/lib/firebase-admin';
+/**
+ * seedVoices.ts – local-mode voice catalog seeder
+ *
+ * In local-first mode there is no Firestore. This script seeds the voice
+ * catalog into a local JSON file (public/voice-catalog.json) that the app
+ * reads directly at runtime. Run via: npx tsx src/scripts/seedVoices.ts
+ */
+
+import fs from 'fs/promises';
+import path from 'path';
 import { NEURAL_VOICES } from '../lib/voices-config';
-import * as admin from '@/lib/firebase-admin';
 import type { VoiceCatalog } from '../lib/types';
 
 const AVATAR_MAP: Record<string, string> = {
@@ -17,13 +25,9 @@ const AVATAR_MAP: Record<string, string> = {
 };
 
 async function seedVoiceCatalog() {
-    console.log('Seeding voice_catalog...');
+    console.log('Seeding voice_catalog to public/voice-catalog.json…');
 
-    const batch = db.batch();
-
-    for (const voice of NEURAL_VOICES) {
-        const docRef = db.collection('voice_catalog').doc(voice.id);
-
+    const catalog: VoiceCatalog[] = NEURAL_VOICES.map((voice) => {
         const voiceData: VoiceCatalog = {
             id: voice.id,
             type: 'builtin',
@@ -48,17 +52,17 @@ async function seedVoiceCatalog() {
                 width: 400,
                 height: 400,
             },
-            createdAt: admin.firestore.FieldValue.serverTimestamp() as any,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp() as any,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
         };
-
-        batch.set(docRef, voiceData, { merge: true });
         console.log(`Prepared ${voice.name} (${voice.id})`);
-    }
+        return voiceData;
+    });
 
     try {
-        await batch.commit();
-        console.log('Successfully seeded voice_catalog!');
+        const outPath = path.join(process.cwd(), 'public', 'voice-catalog.json');
+        await fs.writeFile(outPath, JSON.stringify(catalog, null, 2), 'utf-8');
+        console.log(`Successfully seeded ${catalog.length} voices to ${outPath}`);
         process.exit(0);
     } catch (err) {
         console.error('Error seeding voice_catalog:', err);

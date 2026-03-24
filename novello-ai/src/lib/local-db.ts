@@ -1,8 +1,7 @@
 import { openDB, IDBPDatabase } from 'idb';
-import { Project, Chapter, Entity, Series } from './types';
+import { Project, Chapter, Entity, Series, VoiceClone } from './types';
 
 const DB_NAME = 'novello-ai-local';
-const DB_VERSION = 1;
 
 interface NovelloSchema {
   projects: {
@@ -25,31 +24,41 @@ interface NovelloSchema {
     value: Series;
     indexes: { 'by-updated': number };
   };
+  clones: {
+    key: string;
+    value: VoiceClone;
+    indexes: { 'by-user': string; 'by-status': string };
+  };
 }
 
 let dbPromise: Promise<IDBPDatabase<NovelloSchema>> | null = null;
 
 export const getDB = () => {
   if (!dbPromise) {
-    dbPromise = openDB<NovelloSchema>(DB_NAME, DB_VERSION, {
-      upgrade(db) {
-        // Projects store
-        const projectStore = db.createObjectStore('projects', { keyPath: 'id' });
-        projectStore.createIndex('by-updated', 'updatedAt');
+    dbPromise = openDB<NovelloSchema>(DB_NAME, 2, {
+      upgrade(db, oldVersion) {
+        // Version 1 — core stores
+        if (oldVersion < 1) {
+          const projectStore = db.createObjectStore('projects', { keyPath: 'id' });
+          projectStore.createIndex('by-updated', 'updatedAt');
 
-        // Chapters store
-        const chapterStore = db.createObjectStore('chapters', { keyPath: 'id' });
-        chapterStore.createIndex('by-project', 'projectId');
-        chapterStore.createIndex('by-order', 'order');
+          const chapterStore = db.createObjectStore('chapters', { keyPath: 'id' });
+          chapterStore.createIndex('by-project', 'projectId');
+          chapterStore.createIndex('by-order', 'order');
 
-        // Entities store
-        const entityStore = db.createObjectStore('entities', { keyPath: 'id' });
-        entityStore.createIndex('by-project', 'projectId');
-        entityStore.createIndex('by-type', 'type');
+          const entityStore = db.createObjectStore('entities', { keyPath: 'id' });
+          entityStore.createIndex('by-project', 'projectId');
+          entityStore.createIndex('by-type', 'type');
 
-        // Series store
-        const seriesStore = db.createObjectStore('series', { keyPath: 'id' });
-        seriesStore.createIndex('by-updated', 'updatedAt');
+          const seriesStore = db.createObjectStore('series', { keyPath: 'id' });
+          seriesStore.createIndex('by-updated', 'updatedAt');
+        }
+        // Version 2 — voice clones store
+        if (oldVersion < 2) {
+          const clonesStore = db.createObjectStore('clones', { keyPath: 'id' });
+          clonesStore.createIndex('by-user', 'userId');
+          clonesStore.createIndex('by-status', 'status');
+        }
       },
     });
   }
@@ -128,3 +137,35 @@ export async function deleteEntity(id: string) {
   const db = await getDB();
   await db.delete('entities', id);
 }
+
+/* ─── Voice Clone Operations ─────────────────────────────────── */
+export async function saveClone(clone: VoiceClone) {
+  const db = await getDB();
+  await db.put('clones', { ...clone, updatedAt: Date.now() });
+}
+
+export async function getClone(id: string) {
+  const db = await getDB();
+  return db.get('clones', id);
+}
+
+export async function getAllClones(userId?: string) {
+  const db = await getDB();
+  if (userId) {
+    return db.getAllFromIndex('clones', 'by-user', userId);
+  }
+  return db.getAll('clones');
+}
+
+export async function updateClone(id: string, updates: Partial<VoiceClone>) {
+  const db = await getDB();
+  const existing = await db.get('clones', id);
+  if (!existing) throw new Error(`Clone ${id} not found`);
+  await db.put('clones', { ...existing, ...updates, updatedAt: Date.now() });
+}
+
+export async function deleteClone(id: string) {
+  const db = await getDB();
+  await db.delete('clones', id);
+}
+

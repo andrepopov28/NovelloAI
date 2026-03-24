@@ -58,7 +58,7 @@ export async function createProject(
     coverImage: '',
     settings: {
       aiProvider: 'ollama' as const,
-      modelName: 'deepseek-r1:32b',
+      modelName: '',  // resolved at generation time from OLLAMA_MODEL env var
       temperature: 0.7,
       includeSeriesContext: false,
     },
@@ -374,6 +374,9 @@ interface LocalVersion {
 const VERSIONS_KEY = (chapterId: string) => `novello_versions_${chapterId}`;
 
 export async function saveVersion(chapterId: string, projectId: string, content: string, label?: string): Promise<string> {
+    // SSR guard — localStorage is browser-only
+    if (typeof window === 'undefined') return crypto.randomUUID();
+
     const id = crypto.randomUUID();
     const version: LocalVersion = {
         id, projectId, chapterId, content,
@@ -395,6 +398,9 @@ export async function saveVersion(chapterId: string, projectId: string, content:
 }
 
 export function subscribeToVersions(chapterId: string, callback: (versions: LocalVersion[]) => void, onError: (error: Error) => void) {
+    // SSR guard — localStorage is browser-only
+    if (typeof window === 'undefined') return () => {};
+
     try {
         const stored = localStorage.getItem(VERSIONS_KEY(chapterId));
         callback(stored ? JSON.parse(stored) : []);

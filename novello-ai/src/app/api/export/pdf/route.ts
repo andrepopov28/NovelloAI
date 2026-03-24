@@ -1,59 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getFirebaseDb } from '@/lib/firebase';
-import { collection, getDocs, query, where, doc, getDoc } from '@/lib/firebase';
 import type { Project, Chapter } from '@/lib/types';
 import { verifyIdToken } from '@/lib/firebase-admin';
 
 // =============================================
-// GET /api/export/pdf?projectId=xxx
-// Generates a basic HTML-to-PDF style document.
-// Uses a simple HTML approach with print-ready CSS.
+// POST /api/export/pdf
+// Returns a print-ready HTML file (browser prints to PDF).
+// Local-first: project + chapters are passed in the request body
+// (read from IndexedDB on the client, not from Firestore).
 // =============================================
 
-export async function GET(req: NextRequest) {
-  try {
-    const authHeader = req.headers.get('Authorization');
-    const decoded = await verifyIdToken(authHeader);
+export async function POST(req: NextRequest) {
+    try {
+        const authHeader = req.headers.get('Authorization');
+        await verifyIdToken(authHeader);
 
-    const { searchParams } = new URL(req.url);
-    const projectId = searchParams.get('projectId');
+        const body = await req.json();
+        const { project, chapters } = body as { project: Project; chapters: Chapter[] };
 
-    if (!projectId) {
-      return NextResponse.json({ error: 'projectId is required' }, { status: 400 });
-    }
+        if (!project || !project.title) {
+            return NextResponse.json({ error: 'project is required' }, { status: 400 });
+        }
 
-    const db = getFirebaseDb();
+        if (!Array.isArray(chapters) || chapters.length === 0) {
+            return NextResponse.json({ error: 'No chapters to export' }, { status: 400 });
+        }
 
-    // Fetch project
-    const projectSnap = await getDoc(doc(db, 'projects', projectId));
-    if (!projectSnap.exists()) {
-      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
-    }
-    const project = { id: projectSnap.id, ...projectSnap.data() } as Project;
+        // Sort chapters by order
+        const sorted = [...chapters].sort((a, b) => (a.order || 0) - (b.order || 0));
 
-    // ── Ownership check ───────────────────────────────────────────────────
-    if ((project as any).userId !== decoded.uid) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
-    // Fetch chapters (client-side sort to avoid index requirement)
-    const chaptersSnap = await getDocs(
-      query(
-        collection(db, 'chapters'),
-        where('projectId', '==', projectId)
-      )
-    );
-    const chapters = chaptersSnap.docs
-      .map((d) => ({ id: d.id, ...d.data() }) as Chapter)
-      .sort((a, b) => (a.order || 0) - (b.order || 0));
-
-    if (chapters.length === 0) {
-      return NextResponse.json({ error: 'No chapters to export' }, { status: 400 });
-    }
-
-    // Generate print-ready HTML
-    const html = `
-<!DOCTYPE html>
+        // Generate print-ready HTML
+        const html = `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
@@ -122,37 +98,37 @@ export async function GET(req: NextRequest) {
     <h1>${escapeHtml(project.title || 'Untitled')}</h1>
     <div class="author">by ${escapeHtml(project.metadata?.authorName || 'Author')}</div>
   </div>
-  ${chapters
-        .map(
+  ${sorted
+      .map(
           (ch) => `
   <div class="chapter">
     <h2>${escapeHtml(ch.title)}</h2>
-    <div class="chapter-content">${escapeHtml(ch.content || '<p>(Empty chapter)</p>')}</div>
+    <div class="chapter-content">${ch.content || '<p>(Empty chapter)</p>'}</div>
   </div>`
-        )
-        .join('\n')}
+      )
+      .join('\n')}
 </body>
 </html>`;
 
-    // Return HTML as downloadable file (browsers can print to PDF)
-    return new NextResponse(html, {
-      status: 200,
-      headers: {
-        'Content-Type': 'text/html; charset=utf-8',
-        'Content-Disposition': `attachment; filename="${sanitizeFilename(project.title)}.html"`,
-      },
-    });
-  } catch (error) {
-    console.error('[PDF Export Error]', error);
-    const message = error instanceof Error ? error.message : 'PDF export failed';
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+        // Return print-ready HTML (user opens in browser and prints to PDF)
+        return new NextResponse(html, {
+            status: 200,
+            headers: {
+                'Content-Type': 'text/html; charset=utf-8',
+                'Content-Disposition': `attachment; filename="${sanitizeFilename(project.title)}.html"`,
+            },
+        });
+    } catch (error) {
+        console.error('[PDF Export Error]', error);
+        const message = error instanceof Error ? error.message : 'Export failed';
+        return NextResponse.json({ error: message }, { status: 500 });
+    }
 }
 
 function escapeHtml(str: string): string {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function sanitizeFilename(name: string): string {
-  return (name || 'untitled').replace(/[^a-zA-Z0-9\s\-_]/g, '').trim() || 'untitled';
+    return (name || 'untitled').replace(/[^a-zA-Z0-9\s\-_]/g, '').trim() || 'untitled';
 }

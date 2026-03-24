@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getFirebaseDb } from '@/lib/firebase';
-import { collection, getDocs, query, where, orderBy, doc, getDoc } from '@/lib/firebase';
 import type { Project, Chapter } from '@/lib/types';
 import epub from 'epub-gen-memory';
 import { verifyIdToken } from '@/lib/firebase-admin';
@@ -8,52 +6,33 @@ import { verifyIdToken } from '@/lib/firebase-admin';
 // =============================================
 // POST /api/export/epub
 // Generates a downloadable EPUB from project chapters.
+// Local-first: project + chapters are passed in the request body
+// (read from IndexedDB on the client, not from Firestore).
 // =============================================
 
 export async function POST(req: NextRequest) {
     try {
         const authHeader = req.headers.get('Authorization');
-        const decoded = await verifyIdToken(authHeader);
+        await verifyIdToken(authHeader);
 
-        const { projectId } = await req.json();
-        if (!projectId) {
-            return NextResponse.json({ error: 'projectId is required' }, { status: 400 });
+        const body = await req.json();
+        const { project, chapters } = body as { project: Project; chapters: Chapter[] };
+
+        if (!project || !project.title) {
+            return NextResponse.json({ error: 'project is required' }, { status: 400 });
         }
 
-        const db = getFirebaseDb();
-
-        // Fetch project
-        const projectSnap = await getDoc(doc(db, 'projects', projectId));
-        if (!projectSnap.exists()) {
-            return NextResponse.json({ error: 'Project not found' }, { status: 404 });
-        }
-        const project = { id: projectSnap.id, ...projectSnap.data() } as Project;
-
-        // ── Ownership check ───────────────────────────────────────────────────
-        if ((project as any).userId !== decoded.uid) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
-
-        // Fetch chapters in order
-        const chaptersSnap = await getDocs(
-            query(
-                collection(db, 'chapters'),
-                where('projectId', '==', projectId),
-                orderBy('order', 'asc')
-            )
-        );
-        const chapters = chaptersSnap.docs.map(
-            (d) => ({ id: d.id, ...d.data() }) as Chapter
-        );
-
-        if (chapters.length === 0) {
+        if (!Array.isArray(chapters) || chapters.length === 0) {
             return NextResponse.json({ error: 'No chapters to export' }, { status: 400 });
         }
 
-        // Generate EPUB buffer (epub-gen-memory takes options + content separately)
-        const content = chapters.map((ch) => ({
+        // Sort chapters by order
+        const sorted = [...chapters].sort((a, b) => (a.order || 0) - (b.order || 0));
+
+        // Generate EPUB buffer
+        const content = sorted.map((ch) => ({
             title: escapeHtml(ch.title),
-            content: escapeHtml(ch.content || '<p>(Empty chapter)</p>'),
+            content: ch.content || '<p>(Empty chapter)</p>',
         }));
 
         const buffer = await epub(
@@ -65,7 +44,6 @@ export async function POST(req: NextRequest) {
             content
         );
 
-        // Convert Buffer to Uint8Array for NextResponse compatibility
         const uint8 = new Uint8Array(buffer);
 
         return new NextResponse(uint8, {
