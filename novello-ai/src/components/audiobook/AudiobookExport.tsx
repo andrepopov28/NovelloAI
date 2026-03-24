@@ -39,39 +39,116 @@ export function AudiobookExport({ projectId, userId }: { projectId: string; user
     setIsGenerating(true);
     try {
       const token = user?.uid ?? 'local';
+
+      // Fetch project title + chapters from IndexedDB
+      const { getProject, getChapters } = await import('@/lib/local-db');
+      const [project, chapters] = await Promise.all([
+        getProject(projectId),
+        getChapters(projectId),
+      ]);
+
+      if (!project) throw new Error('Project not found in local database');
+      if (!chapters || chapters.length === 0) throw new Error('No chapters to generate audio for');
+
+      const sortedChapters = [...chapters].sort((a, b) => a.order - b.order).map(c => ({
+        id: c.id,
+        title: c.title,
+        content: c.content,
+        order: c.order,
+      }));
+
+      // Create a pending job record immediately
+      const tempJobId = `local-${Date.now()}`;
+      const pendingJob: ExportJob = {
+        id: tempJobId,
+        projectId,
+        userId: userId ?? 'local',
+        type: 'audiobook',
+        status: 'processing',
+        progress: { currentChapter: 0, totalChapters: sortedChapters.length, percentComplete: 0, stage: 'cleaning' },
+        formats: {},
+        settings: { voiceId: selectedVoice, language: 'en', speed: 1, pauseDurationMs: 1000 },
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      setJobs(prev => [pendingJob, ...prev]);
+
       const res = await fetch('/api/ai/audiobook', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          projectId,
-          settings: {
-            voiceId: selectedVoice,
-            language: 'en',
-            speed: 1,
-            pauseDurationMs: 1000,
-          },
+          projectTitle: project.title,
+          chapters: sortedChapters,
+          settings: { voiceId: selectedVoice, language: 'en', speed: 1, pauseDurationMs: 1000 },
         }),
       });
 
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to start job');
+      if (!res.ok || !res.body) {
+        const data = await res.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(data.error || 'Failed to start audiobook generation');
       }
 
-      const newJob = await res.json() as ExportJob;
-      const updated = [newJob, ...jobs];
-      setJobs(updated);
-      localStorage.setItem(JOBS_KEY(projectId), JSON.stringify(updated));
-      toast.success('Audiobook generation started');
+      // Parse SSE stream
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let exportId = tempJobId;
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() ?? '';
+
+        for (const chunk of lines) {
+          const dataLine = chunk.replace(/^data:\s*/, '').trim();
+          if (!dataLine) continue;
+          try {
+            const event = JSON.parse(dataLine);
+
+            if (event.type === 'started') {
+              exportId = event.exportId;
+            }
+
+            setJobs(prev => prev.map(j => j.id === tempJobId ? {
+              ...j,
+              id: exportId,
+              status: event.type === 'complete' ? 'completed' : event.type === 'error' ? 'failed' : 'processing',
+              progress: {
+                currentChapter: event.currentChapter ?? 0,
+                totalChapters: event.totalChapters ?? sortedChapters.length,
+                percentComplete: event.percentComplete ?? 0,
+                stage: event.stage ?? 'tts',
+              },
+              formats: event.downloadUrl ? { m4b: { path: event.downloadUrl, sizeBytes: 0, durationMs: (event.durationSeconds ?? 0) * 1000, codec: 'aac', bitrateKbps: 64, channels: 1, sampleRate: 22050 } } : j.formats,
+              error: event.type === 'error' ? event.message : undefined,
+              updatedAt: Date.now(),
+            } : j));
+
+            if (event.type === 'complete') {
+              toast.success('🎧 Audiobook generated!');
+            }
+            if (event.type === 'error') {
+              toast.error(`Generation failed: ${event.message}`);
+            }
+          } catch { /* skip malformed events */ }
+        }
+      }
+
+      // Persist final jobs list to localStorage
+      setJobs(prev => {
+        localStorage.setItem(JOBS_KEY(projectId), JSON.stringify(prev));
+        return prev;
+      });
     } catch (err: any) {
       toast.error(err.message);
+      setJobs(prev => prev.filter(j => j.status !== 'processing'));
     } finally {
       setIsGenerating(false);
     }
   };
+
 
   const handleCancel = async (exportId: string) => {
     try {
