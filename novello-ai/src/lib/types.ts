@@ -66,6 +66,7 @@ export interface Chapter {
     userId: string;
     title: string;
     content: string; // HTML format from TipTap
+    audioUrl?: string; // Base64 Data URL for manual Hybrid Audiobook recording (Narrator mode)
     synopsis: string; // AI-generated during Brainstorm phase
     order: number;
     status: 'draft' | 'review' | 'final';
@@ -266,6 +267,7 @@ export interface ExportJob {
         language: string;
         speed: number;
         pauseDurationMs: number;
+        bitrateKbps?: number;
     };
     error?: string;
     createdAt: number;

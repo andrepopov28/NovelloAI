@@ -17,6 +17,10 @@ const GenerateRequestSchema = z.object({
     genre: z.string().optional(),
     context: z.string().optional(),
     projectId: z.string().optional(),
+    projectData: z.unknown().optional(),
+    chaptersData: z.array(z.unknown()).optional(),
+    entitiesData: z.array(z.unknown()).optional(),
+    seriesData: z.unknown().nullable().optional(),
     activeChapterText: z.string().optional(),
     recentConversations: z.array(z.object({ role: z.string(), content: z.string() })).optional(),
     endpointMode: z.string().default('generate'),
@@ -81,32 +85,11 @@ export async function POST(req: NextRequest) {
         else if (endpointMode === 'brainstorm') baseMaxTokens = 6250; // ~25k chars
         else if (endpointMode === 'audiobook' || endpointMode === 'cover') baseMaxTokens = 2000;
 
-        // 2. Pre-fetch project documents so we don't repeat DB calls on fallback
-        let projectData: Project | undefined, chaptersData: Chapter[] = [], entitiesData: Entity[] = [], seriesData: Series | null = null;
-        if (projectId && !manualContext) {
-            try {
-                const [projectDoc, chaptersSnap, entitiesSnap] = await Promise.all([
-                    db.collection('projects').doc(projectId).get(),
-                    db.collection('chapters').where('projectId', '==', projectId).get(),
-                    db.collection('entities').where('projectId', '==', projectId).get(),
-                ]);
-
-                if (projectDoc.exists) {
-                    projectData = { id: projectDoc.id, ...projectDoc.data() } as Project;
-                    chaptersData = chaptersSnap.docs.map(d => ({ id: d.id, ...d.data() } as Chapter));
-                    entitiesData = entitiesSnap.docs.map(d => ({ id: d.id, ...d.data() } as Entity));
-
-                    if (projectData.seriesId) {
-                        const seriesDoc = await db.collection('series').doc(projectData.seriesId).get();
-                        if (seriesDoc.exists) {
-                            seriesData = { id: seriesDoc.id, ...seriesDoc.data() } as Series;
-                        }
-                    }
-                }
-            } catch (err) {
-                console.warn(`[AI] ${requestId} | Failed to fetch project data:`, err);
-            }
-        }
+        // 2. Since the app is local-first, the client sends context via the body payload
+        const projectData = body.projectData as Project | undefined;
+        const chaptersData = (body.chaptersData || []) as Chapter[];
+        const entitiesData = (body.entitiesData || []) as Entity[];
+        const seriesData = (body.seriesData || null) as Series | null;
 
         // 3. Generation retry loop (to handle context limits)
         let attempts = 0;
@@ -133,8 +116,11 @@ export async function POST(req: NextRequest) {
                 finalPrompt = EXPAND_PROMPT(prompt!, context);
             } else if (action === 'outline') {
                 finalPrompt = OUTLINE_PROMPT(prompt!, genre || '');
-            } else if (action === 'summarize') {
+            } else if (action === 'summary') {
                 finalPrompt = SUMMARIZE_PROMPT(prompt!);
+            } else if (action === 'cover') {
+                const { COVER_PROMPT } = await import('@/lib/prompts');
+                finalPrompt = COVER_PROMPT(body.title || 'Untitled', body.synopsis || '', body.genre || '');
             } else if (action === 'write_chapter') {
                 const { WRITE_CHAPTER_PROMPT } = await import('@/lib/prompts');
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any

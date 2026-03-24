@@ -29,13 +29,18 @@ interface NovelloSchema {
     value: VoiceClone;
     indexes: { 'by-user': string; 'by-status': string };
   };
+  versions: {
+    key: string;
+    value: import('./types').ChapterVersion;
+    indexes: { 'by-chapter': string };
+  };
 }
 
 let dbPromise: Promise<IDBPDatabase<NovelloSchema>> | null = null;
 
 export const getDB = () => {
   if (!dbPromise) {
-    dbPromise = openDB<NovelloSchema>(DB_NAME, 2, {
+    dbPromise = openDB<NovelloSchema>(DB_NAME, 3, {
       upgrade(db, oldVersion) {
         // Version 1 — core stores
         if (oldVersion < 1) {
@@ -58,6 +63,11 @@ export const getDB = () => {
           const clonesStore = db.createObjectStore('clones', { keyPath: 'id' });
           clonesStore.createIndex('by-user', 'userId');
           clonesStore.createIndex('by-status', 'status');
+        }
+        // Version 3 — version history store
+        if (oldVersion < 3) {
+          const versionsStore = db.createObjectStore('versions', { keyPath: 'id' });
+          versionsStore.createIndex('by-chapter', 'chapterId');
         }
       },
     });
@@ -119,7 +129,10 @@ export async function getChapters(projectId: string) {
 
 export async function deleteChapter(id: string) {
   const db = await getDB();
-  await db.delete('chapters', id);
+  const tx = db.transaction(['chapters', 'versions'], 'readwrite');
+  await tx.objectStore('chapters').delete(id);
+  await deleteVersionsForChapter(tx, id);
+  await tx.done;
 }
 
 /* ─── Entity Operations ──────────────────────────────────────── */
@@ -169,3 +182,49 @@ export async function deleteClone(id: string) {
   await db.delete('clones', id);
 }
 
+/* ─── Version History Operations ─────────────────────────────── */
+export async function saveVersionToDB(version: import('./types').ChapterVersion) {
+  const db = await getDB();
+  await db.put('versions', version);
+}
+
+export async function getVersionsForChapter(chapterId: string) {
+  const db = await getDB();
+  return db.getAllFromIndex('versions', 'by-chapter', chapterId);
+}
+
+export async function deleteVersionsForChapter(tx: any, chapterId: string) {
+  const versions = await tx.objectStore('versions').index('by-chapter').getAllKeys(chapterId);
+  for (const vId of versions) {
+    await tx.objectStore('versions').delete(vId);
+  }
+}
+
+/* ─── Backup & Restore ───────────────────────────────────────── */
+export async function exportDatabase() {
+  const db = await getDB();
+  const data = {
+    projects: await db.getAll('projects'),
+    chapters: await db.getAll('chapters'),
+    entities: await db.getAll('entities'),
+    series: await db.getAll('series'),
+    clones: await db.getAll('clones'),
+    versions: await db.getAll('versions'),
+  };
+  return JSON.stringify(data);
+}
+
+export async function importDatabase(jsonData: string) {
+  const db = await getDB();
+  const data = JSON.parse(jsonData);
+  const tx = db.transaction(['projects', 'chapters', 'entities', 'series', 'clones', 'versions'], 'readwrite');
+  
+  if (data.projects) for (const item of data.projects) await tx.objectStore('projects').put(item);
+  if (data.chapters) for (const item of data.chapters) await tx.objectStore('chapters').put(item);
+  if (data.entities) for (const item of data.entities) await tx.objectStore('entities').put(item);
+  if (data.series) for (const item of data.series) await tx.objectStore('series').put(item);
+  if (data.clones) for (const item of data.clones) await tx.objectStore('clones').put(item);
+  if (data.versions) for (const item of data.versions) await tx.objectStore('versions').put(item);
+
+  await tx.done;
+}

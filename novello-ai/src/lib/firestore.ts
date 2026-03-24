@@ -9,7 +9,9 @@ import {
   deleteChapter as dbDeleteChapter,
   saveEntity as dbSaveEntity,
   getEntities as dbGetEntities,
-  deleteEntity as dbDeleteEntity
+  deleteEntity as dbDeleteEntity,
+  saveVersionToDB,
+  getVersionsForChapter
 } from './local-db';
 import type { Project, Chapter, Entity, ChapterVersion, Series } from './types';
 import { computeProjectStyle } from './style-engine';
@@ -358,56 +360,38 @@ export function subscribeToSeriesProjects(seriesId: string, callback: (projects:
 
 /* ─── Version History ────────────────────────────────────────── */
 
-interface LocalVersion {
-    id: string;
-    projectId: string;
-    chapterId: string;
-    userId: string;
-    content: string;
-    wordCount: number;
-    createdAt: number;
-    source: 'autosave' | 'manual' | 'ai-generation' | 'import';
-    isPinned: boolean;
-    label?: string;
-}
-
-const VERSIONS_KEY = (chapterId: string) => `novello_versions_${chapterId}`;
-
-export async function saveVersion(chapterId: string, projectId: string, content: string, label?: string): Promise<string> {
-    // SSR guard — localStorage is browser-only
-    if (typeof window === 'undefined') return crypto.randomUUID();
-
+export async function saveVersion(
+    chapterId: string, 
+    userId: string, 
+    content: string, 
+    source: 'autosave' | 'manual' | 'ai-generation' | 'import' = 'manual'
+): Promise<string> {
     const id = crypto.randomUUID();
-    const version: LocalVersion = {
-        id, projectId, chapterId, content,
-        userId: 'local',
-        source: 'manual',
+    const wordCount = content ? content.replace(/<[^>]+>/g, '').split(/\s+/).filter(Boolean).length : 0;
+    const version: ChapterVersion = {
+        id, chapterId, content,
+        userId: userId || 'local',
+        source,
         isPinned: false,
-        wordCount: content.replace(/<[^>]+>/g, '').split(/\s+/).filter(Boolean).length,
-        createdAt: Date.now(),
-        label,
+        wordCount,
+        createdAt: Date.now()
     };
-    try {
-        const stored = localStorage.getItem(VERSIONS_KEY(chapterId));
-        const versions: LocalVersion[] = stored ? JSON.parse(stored) : [];
-        versions.unshift(version);
-        // Keep last 20 versions per chapter
-        localStorage.setItem(VERSIONS_KEY(chapterId), JSON.stringify(versions.slice(0, 20)));
-    } catch { /* ignore storage errors */ }
+    
+    await saveVersionToDB(version);
+    events.emit(`versions-changed-${chapterId}`);
     return id;
 }
 
-export function subscribeToVersions(chapterId: string, callback: (versions: LocalVersion[]) => void, onError: (error: Error) => void) {
-    // SSR guard — localStorage is browser-only
-    if (typeof window === 'undefined') return () => {};
-
-    try {
-        const stored = localStorage.getItem(VERSIONS_KEY(chapterId));
-        callback(stored ? JSON.parse(stored) : []);
-    } catch (e) {
-        onError(e as Error);
-    }
-    // Return a no-op unsubscribe since localStorage doesn't have listeners
-    return () => {};
+export function subscribeToVersions(chapterId: string, callback: (versions: ChapterVersion[]) => void, onError: (error: Error) => void) {
+    const refresh = async () => {
+        try {
+            const versions = await getVersionsForChapter(chapterId);
+            callback(versions.sort((a,b) => b.createdAt - a.createdAt)); // latest first
+        } catch (e) {
+            onError(e as Error);
+        }
+    };
+    refresh();
+    return events.subscribe(`versions-changed-${chapterId}`, refresh);
 }
 

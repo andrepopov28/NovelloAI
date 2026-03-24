@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { AIProvider, OutlineResult } from '@/lib/types';
 import { useProjects } from './useProjects';
 import { useAuth } from './useAuth';
+import { getProject, getChapters, getEntities } from '@/lib/local-db';
 import { toast } from 'sonner';
 import DOMPurify from 'dompurify';
 
@@ -127,6 +128,13 @@ export function useAI(initialProvider: AIProvider = 'ollama', initialModel: stri
 
             try {
                 const token = user?.uid ?? 'local';
+                let projectData, chaptersData, entitiesData;
+                if (projectId) {
+                    projectData = await getProject(projectId);
+                    chaptersData = await getChapters(projectId);
+                    entitiesData = await getEntities(projectId);
+                }
+
                 const res = await fetchWithRetry(
                     '/api/ai/generate',
                     {
@@ -142,6 +150,9 @@ export function useAI(initialProvider: AIProvider = 'ollama', initialModel: stri
                             mode: 'stream',
                             action,
                             projectId,
+                            projectData,
+                            chaptersData,
+                            entitiesData,
                             activeChapterText,
                             recentConversations,
                         }),
@@ -219,6 +230,13 @@ export function useAI(initialProvider: AIProvider = 'ollama', initialModel: stri
 
             try {
                 const token = user?.uid ?? 'local';
+                let projectData, chaptersData, entitiesData;
+                if (projectId) {
+                    projectData = await getProject(projectId);
+                    chaptersData = await getChapters(projectId);
+                    entitiesData = await getEntities(projectId);
+                }
+
                 const res = await fetchWithRetry(
                     '/api/ai/generate',
                     {
@@ -235,6 +253,9 @@ export function useAI(initialProvider: AIProvider = 'ollama', initialModel: stri
                             action: 'outline',
                             genre,
                             projectId,
+                            projectData,
+                            chaptersData,
+                            entitiesData,
                         }),
                     },
                     controller.signal
@@ -289,6 +310,13 @@ export function useAI(initialProvider: AIProvider = 'ollama', initialModel: stri
 
             try {
                 const token = user?.uid ?? 'local';
+                let projectData, chaptersData, entitiesData;
+                if (projectId) {
+                    projectData = await getProject(projectId);
+                    chaptersData = await getChapters(projectId);
+                    entitiesData = await getEntities(projectId);
+                }
+
                 const res = await fetchWithRetry(
                     '/api/ai/generate',
                     {
@@ -307,6 +335,9 @@ export function useAI(initialProvider: AIProvider = 'ollama', initialModel: stri
                             action: 'write_chapter',
                             styleProfile,
                             projectId,
+                            projectData,
+                            chaptersData,
+                            entitiesData,
                             activeChapterText,
                             recentConversations,
                         }),

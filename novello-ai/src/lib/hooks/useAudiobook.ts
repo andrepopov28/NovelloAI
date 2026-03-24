@@ -52,7 +52,7 @@ export function useAudiobook() {
     }, []);
 
     const speak = useCallback(
-        async (text: string, chapterIndex: number) => {
+        async (text: string, chapterIndex: number, customAudioUrl?: string) => {
             if (typeof window === 'undefined') return;
 
             // Stop anything playing
@@ -76,6 +76,36 @@ export function useAudiobook() {
                 progress: 0,
                 isLoading: true,
             }));
+
+            // Handle Narrator Mode Custom Audio
+            if (customAudioUrl) {
+                const audio = new Audio(customAudioUrl);
+                audioRef.current = audio;
+                audio.playbackRate = playback.speed;
+                
+                audio.ontimeupdate = () => {
+                    const progress = audio.duration > 0 ? audio.currentTime / audio.duration : 0;
+                    setPlayback((prev) => ({ ...prev, progress, isLoading: false }));
+                };
+
+                audio.onended = () => {
+                    setPlayback((prev) => ({
+                        ...prev,
+                        isPlaying: false,
+                        isPaused: false,
+                        progress: 1,
+                        isLoading: false,
+                    }));
+                };
+                
+                try {
+                    await audio.play();
+                } catch (err: any) {
+                    console.error('Custom audio playback failed', err);
+                    setPlayback(prev => ({ ...prev, isPlaying: false, isLoading: false }));
+                }
+                return;
+            }
 
             // Try Piper neural first
             if (piperService.isNeuralAvailable()) {

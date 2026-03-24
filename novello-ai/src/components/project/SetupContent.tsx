@@ -12,11 +12,13 @@ import {
     Tag,
     Image as ImageIcon,
     Target,
-    X,
     Loader2,
     CheckCircle2,
+    Sparkles,
+    X,
 } from 'lucide-react';
 import { useProjects } from '@/lib/hooks/useProjects';
+import { useAuth } from '@/lib/hooks/useAuth';
 import { toast } from 'sonner';
 
 // ─── Delete Confirmation Modal ────────────────────────────────
@@ -85,6 +87,10 @@ export default function SetupContent({ projectId }: { projectId: string }) {
     const [saved, setSaved] = useState(false);
     const [showDelete, setShowDelete] = useState(false);
     const [deleting, setDeleting] = useState(false);
+    
+    const [coverPrompt, setCoverPrompt] = useState('');
+    const [generatingCoverPrompt, setGeneratingCoverPrompt] = useState(false);
+    const { user } = useAuth();
 
     // Hydrate form when project loads
     useEffect(() => {
@@ -138,6 +144,39 @@ export default function SetupContent({ projectId }: { projectId: string }) {
         } catch {
             toast.error('Failed to delete project');
             setDeleting(false);
+        }
+    };
+
+    const handleGenerateCoverPrompt = async () => {
+        if (!title.trim() && !synopsis.trim()) {
+            toast.error('Please enter a Title and Synopsis first.');
+            return;
+        }
+        setGeneratingCoverPrompt(true);
+        try {
+            const token = user?.uid ?? 'local';
+            const res = await fetch('/api/ai/cover', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    mode: 'json',
+                    action: 'cover',
+                    title: title.trim(),
+                    synopsis: synopsis.trim(),
+                    genre: genre.trim()
+                })
+            });
+            if (!res.ok) throw new Error('Failed to generate prompt');
+            const data = await res.json();
+            setCoverPrompt(data.result);
+            toast.success('Image prompt generated!');
+        } catch (err: any) {
+            toast.error(err.message || 'Generation failed');
+        } finally {
+            setGeneratingCoverPrompt(false);
         }
     };
 
@@ -294,6 +333,31 @@ export default function SetupContent({ projectId }: { projectId: string }) {
                                 <span>No cover set</span>
                             </div>
                         )}
+
+                        <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid var(--border)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                <label className="setup-field-label" style={{ marginBottom: 0 }}>
+                                    <span className="setup-field-icon"><Sparkles size={13} /></span>
+                                    AI Cover Prompt Generator
+                                </label>
+                                <button className="setup-btn setup-btn-ghost" style={{ fontSize: '0.75rem', padding: '4px 8px' }} onClick={handleGenerateCoverPrompt} disabled={generatingCoverPrompt}>
+                                    {generatingCoverPrompt ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                                    {generatingCoverPrompt ? 'Generating...' : 'Generate Prompt'}
+                                </button>
+                            </div>
+                            <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginBottom: '12px', lineHeight: 1.4 }}>
+                                Generate a highly detailed image prompt using your local Ollama model based on your Title, Genre, and Synopsis. Copy and paste this into Midjourney or Stable Diffusion.
+                            </p>
+                            {coverPrompt && (
+                                <textarea
+                                    className="setup-input setup-textarea"
+                                    value={coverPrompt}
+                                    onChange={(e) => setCoverPrompt(e.target.value)}
+                                    rows={4}
+                                    style={{ fontSize: '0.8rem', background: 'var(--surface-primary)' }}
+                                />
+                            )}
+                        </div>
                     </section>
                 </div>
 

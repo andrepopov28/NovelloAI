@@ -26,12 +26,13 @@ import type { Chapter } from '@/lib/types';
 import { toast } from 'sonner';
 import { VoiceLibrary } from '@/components/audiobook/VoiceLibrary';
 import { AudiobookExport } from '@/components/audiobook/AudiobookExport';
+import { ChapterRecorder } from '@/components/audiobook/ChapterRecorder';
 
 export default function AudiobookContent({ projectId }: { projectId: string }) {
     const searchParams = useSearchParams();
     const { user } = useAuth();
     const userId = user?.uid;
-    const { chapters, loading } = useChapters(projectId);
+    const { chapters, loading, updateChapter } = useChapters(projectId);
     const { voices, playback, speak, pause, resume, stop, setSpeed, setVoice } = useAudiobook();
 
     // Voice Library State
@@ -56,6 +57,7 @@ export default function AudiobookContent({ projectId }: { projectId: string }) {
     const [browserVoices, setBrowserVoices] = useState<SpeechSynthesisVoice[]>([]);
     const [selectedBrowserVoice, setSelectedBrowserVoice] = useState<string>('');
     const [previewingPickerVoice, setPreviewingPickerVoice] = useState<string | null>(null);
+    const [recordingChapterId, setRecordingChapterId] = useState<string | null>(null);
 
     // Load persisted settings
     useEffect(() => {
@@ -75,9 +77,9 @@ export default function AudiobookContent({ projectId }: { projectId: string }) {
         window.speechSynthesis.onvoiceschanged = load;
     }, [selectedBrowserVoice]);
 
-    const speakWithProvider = useCallback((text: string, chapterIndex: number) => {
+    const speakWithProvider = useCallback((text: string, chapterIndex: number, customAudioUrl?: string) => {
         // Default: browser
-        speak(text, chapterIndex);
+        speak(text, chapterIndex, customAudioUrl);
     }, [speak]);
 
     const selectProvider = (p: 'browser') => {
@@ -106,13 +108,13 @@ export default function AudiobookContent({ projectId }: { projectId: string }) {
         } else if (playback.currentChapterIndex === index && !playback.isPlaying) {
             resume();
         } else {
-            speakWithProvider(chapter.content || '', index);
+            speakWithProvider(chapter.content || '', index, chapter.audioUrl);
         }
     };
 
     const handlePlayAll = () => {
         if (sortedChapters.length > 0) {
-            speakWithProvider(sortedChapters[0].content || '', 0);
+            speakWithProvider(sortedChapters[0].content || '', 0, sortedChapters[0].audioUrl);
         }
     };
 
@@ -263,28 +265,55 @@ export default function AudiobookContent({ projectId }: { projectId: string }) {
                                 const duration = Math.ceil(wordCount / 150); // ~150 words per minute
 
                                 return (
-                                    <div
-                                        key={chapter.id}
-                                        className={`ab-chapter-card premium-card animate-slide-up ${isActive ? 'ab-chapter-active' : ''}`}
-                                        onClick={() => handlePlayChapter(chapter, index)}
-                                    >
-                                        <div className="ab-chapter-left">
-                                            <div className={`ab-chapter-play ${isActive ? 'ab-chapter-play-active' : ''}`}>
-                                                {isActive && playback.isPlaying ? (
-                                                    <Pause size={14} />
-                                                ) : (
-                                                    <Play size={14} />
+                                    <div key={chapter.id} className="ab-chapter-container animate-slide-up">
+                                        <div
+                                            className={`ab-chapter-card premium-card ${isActive ? 'ab-chapter-active' : ''}`}
+                                            onClick={() => handlePlayChapter(chapter, index)}
+                                        >
+                                            <div className="ab-chapter-left">
+                                                <div className={`ab-chapter-play ${isActive ? 'ab-chapter-play-active' : ''}`}>
+                                                    {isActive && playback.isPlaying ? (
+                                                        <Pause size={14} />
+                                                    ) : (
+                                                        <Play size={14} />
+                                                    )}
+                                                </div>
+                                                <div className="ab-chapter-info">
+                                                    <span className="ab-chapter-num">Chapter {index + 1}</span>
+                                                    <span className="ab-chapter-name">{chapter.title}</span>
+                                                </div>
+                                            </div>
+                                            <div className="ab-chapter-meta">
+                                                {chapter.audioUrl && (
+                                                    <span className="ab-badge-custom-audio" title="Custom audio recording">
+                                                        <Mic2 size={12} /> Narrated
+                                                    </span>
                                                 )}
-                                            </div>
-                                            <div className="ab-chapter-info">
-                                                <span className="ab-chapter-num">Chapter {index + 1}</span>
-                                                <span className="ab-chapter-name">{chapter.title}</span>
+                                                <span>{wordCount.toLocaleString()} words</span>
+                                                <span>~{duration} min</span>
+                                                <button 
+                                                    className="ab-btn-record-inline" 
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setRecordingChapterId(recordingChapterId === chapter.id ? null : chapter.id);
+                                                    }}
+                                                >
+                                                    <Mic2 size={14} />
+                                                </button>
                                             </div>
                                         </div>
-                                        <div className="ab-chapter-meta">
-                                            <span>{wordCount.toLocaleString()} words</span>
-                                            <span>~{duration} min</span>
-                                        </div>
+                                        
+                                        {recordingChapterId === chapter.id && (
+                                            <div className="ab-recorder-wrapper">
+                                                <ChapterRecorder 
+                                                    chapter={chapter} 
+                                                    onClose={() => setRecordingChapterId(null)}
+                                                    onSave={async (audioData) => {
+                                                        await updateChapter(chapter.id, { audioUrl: audioData });
+                                                    }}
+                                                />
+                                            </div>
+                                        )}
                                     </div>
                                 );
                             })}
@@ -759,6 +788,44 @@ export default function AudiobookContent({ projectId }: { projectId: string }) {
                     cursor: pointer; transition: opacity 0.15s;
                 }
                 .vp-done-btn:hover { opacity: 0.9; }
+                /* ── Narrator Mode Custom Styles ── */
+                .ab-btn-record-inline {
+                    background: none;
+                    border: none;
+                    color: var(--text-tertiary);
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 4px;
+                    border-radius: var(--radius-sm);
+                    transition: all var(--transition-fast);
+                }
+                .ab-btn-record-inline:hover {
+                    color: #ef4444;
+                    background: rgba(239, 68, 68, 0.1);
+                }
+                .ab-badge-custom-audio {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 4px;
+                    font-size: 0.65rem;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    color: #ef4444;
+                    background: rgba(239, 68, 68, 0.1);
+                    padding: 2px 6px;
+                    border-radius: var(--radius-sm);
+                }
+                .ab-recorder-wrapper {
+                    margin-top: 8px;
+                    margin-bottom: 16px;
+                    animation: slideDown 0.2s ease-out;
+                }
+                @keyframes slideDown {
+                    from { opacity: 0; transform: translateY(-10px); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
             `}</style>
 
             {/* ── Voice Picker Slide-Up Panel ── */}

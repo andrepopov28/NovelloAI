@@ -14,6 +14,9 @@ export function AudiobookExport({ projectId, userId }: { projectId: string; user
   const [jobs, setJobs] = useState<ExportJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedVoice, setSelectedVoice] = useState<string>('');
+  const [selectedDialogueVoice, setSelectedDialogueVoice] = useState<string>('');
+  const [bitrateKbps, setBitrateKbps] = useState<number>(64);
+  const [pauseDurationMs, setPauseDurationMs] = useState<number>(1000);
   const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
@@ -59,6 +62,15 @@ export function AudiobookExport({ projectId, userId }: { projectId: string; user
 
       // Create a pending job record immediately
       const tempJobId = `local-${Date.now()}`;
+      const settings = { 
+        voiceId: selectedVoice, 
+        dialogueVoiceId: selectedDialogueVoice || undefined,
+        language: 'en', 
+        speed: 1, 
+        pauseDurationMs, 
+        bitrateKbps 
+      };
+
       const pendingJob: ExportJob = {
         id: tempJobId,
         projectId,
@@ -67,7 +79,7 @@ export function AudiobookExport({ projectId, userId }: { projectId: string; user
         status: 'processing',
         progress: { currentChapter: 0, totalChapters: sortedChapters.length, percentComplete: 0, stage: 'cleaning' },
         formats: {},
-        settings: { voiceId: selectedVoice, language: 'en', speed: 1, pauseDurationMs: 1000 },
+        settings,
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };
@@ -79,7 +91,7 @@ export function AudiobookExport({ projectId, userId }: { projectId: string; user
         body: JSON.stringify({
           projectTitle: project.title,
           chapters: sortedChapters,
-          settings: { voiceId: selectedVoice, language: 'en', speed: 1, pauseDurationMs: 1000 },
+          settings,
         }),
       });
 
@@ -121,7 +133,7 @@ export function AudiobookExport({ projectId, userId }: { projectId: string; user
                 percentComplete: event.percentComplete ?? 0,
                 stage: event.stage ?? 'tts',
               },
-              formats: event.downloadUrl ? { m4b: { path: event.downloadUrl, sizeBytes: 0, durationMs: (event.durationSeconds ?? 0) * 1000, codec: 'aac', bitrateKbps: 64, channels: 1, sampleRate: 22050 } } : j.formats,
+              formats: event.downloadUrl ? { m4b: { path: event.downloadUrl, sizeBytes: 0, durationMs: (event.durationSeconds ?? 0) * 1000, codec: 'aac', bitrateKbps, channels: 1, sampleRate: 22050 } } : j.formats,
               error: event.type === 'error' ? event.message : undefined,
               updatedAt: Date.now(),
             } : j));
@@ -213,15 +225,51 @@ export function AudiobookExport({ projectId, userId }: { projectId: string; user
             <Loader2 size={16} className="ab-spin" /> Loading Library...
           </div>
         ) : (
-          <select className="ab-ex-select" value={selectedVoice} onChange={(e) => setSelectedVoice(e.target.value)}>
-            {allVoices.map(v => (
-              <option key={v.id} value={v.id}>
-                {v.displayName} {v.isBuiltin ? '' : '(Custom)'}
-              </option>
-            ))}
-          </select>
+          <div style={{ display: 'flex', gap: '16px', marginBottom: '20px', maxWidth: '400px' }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: 600 }}>Narrator Voice</label>
+              <select className="ab-ex-select" style={{ marginBottom: 0, width: '100%' }} value={selectedVoice} onChange={(e) => setSelectedVoice(e.target.value)}>
+                {allVoices.map(v => (
+                  <option key={v.id} value={v.id}>
+                    {v.displayName} {v.isBuiltin ? '' : '(Custom)'}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: 600 }}>Dialogue Voice (Optional)</label>
+              <select className="ab-ex-select" style={{ marginBottom: 0, width: '100%' }} value={selectedDialogueVoice} onChange={(e) => setSelectedDialogueVoice(e.target.value)}>
+                <option value="">Same as Narrator</option>
+                {allVoices.map(v => (
+                  <option key={`dialogue-${v.id}`} value={v.id}>
+                    {v.displayName} {v.isBuiltin ? '' : '(Custom)'}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
         )}
-        <br />
+
+        <div style={{ display: 'flex', gap: '16px', marginBottom: '20px', maxWidth: '400px' }}>
+          <div style={{ flex: 1 }}>
+            <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: 600 }}>Audio Quality (Bitrate)</label>
+            <select className="ab-ex-select" style={{ marginBottom: 0, width: '100%' }} value={bitrateKbps} onChange={(e) => setBitrateKbps(Number(e.target.value))}>
+              <option value={32}>32 kbps (Smallest file)</option>
+              <option value={64}>64 kbps (Standard Audiobook)</option>
+              <option value={128}>128 kbps (High Quality)</option>
+              <option value={192}>192 kbps (Ultra Quality)</option>
+            </select>
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: 600 }}>Chapter Pause Gap</label>
+            <select className="ab-ex-select" style={{ marginBottom: 0, width: '100%' }} value={pauseDurationMs} onChange={(e) => setPauseDurationMs(Number(e.target.value))}>
+              <option value={500}>0.5 seconds</option>
+              <option value={1000}>1 second (Standard)</option>
+              <option value={2000}>2 seconds</option>
+              <option value={3000}>3 seconds</option>
+            </select>
+          </div>
+        </div>
 
         <button className="ab-ex-generate-btn" onClick={handleGenerate} disabled={isGenerating}>
           {isGenerating ? <Loader2 size={18} className="ab-spin" /> : <Mic2 size={18} />}

@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Download, BookOpen, Eye, EyeOff, Search, Loader2, Sparkles, History, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, Download, BookOpen, Eye, EyeOff, Search, Loader2, Sparkles, History, ShieldAlert, Activity } from 'lucide-react';
 import { useChapters } from '@/lib/hooks/useChapters';
 import { useEntities } from '@/lib/hooks/useEntities';
 import { useAutoSave } from '@/lib/hooks/useAutoSave';
@@ -20,6 +20,7 @@ import { AlertsPanel } from '@/components/editor/AlertsPanel';
 import { saveVersion } from '@/lib/firestore';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useContinuityChecker } from '@/lib/hooks/useContinuityChecker';
+import { analyzeReadability } from '@/lib/readability';
 import { toast } from 'sonner';
 
 export function ProjectDashboardContent({ projectId }: { projectId: string }) {
@@ -39,9 +40,15 @@ export function ProjectDashboardContent({ projectId }: { projectId: string }) {
     const [tracing, setTracing] = useState(false);
     const [showHistory, setShowHistory] = useState(false);
     const [showAlerts, setShowAlerts] = useState(false);
+    const [showReadability, setShowReadability] = useState(false);
 
     // Get active chapter
     const activeChapter = chapters.find((c) => c.id === activeChapterId) || null;
+    const activeProject = projects.find(p => p.id === projectId);
+    const readability = useMemo(() => analyzeReadability(editorContent), [editorContent]);
+    const targetWords = activeProject?.targetWordCount || 80000;
+    const currentWords = activeProject?.wordCount || 0;
+    const progressPct = Math.min(1, currentWords / targetWords);
 
     // Auto-select first chapter when loaded (must be in useEffect, not render body)
     useEffect(() => {
@@ -291,6 +298,27 @@ export function ProjectDashboardContent({ projectId }: { projectId: string }) {
                             {activeChapter?.title || 'Select a chapter'}
                         </span>
                         <SyncIndicator status={syncStatus} />
+
+                        {/* Word Count Progress */}
+                        {activeProject && (
+                            <div className="flex items-center gap-2 ml-4 px-3 py-1.5 rounded-lg bg-[var(--surface-primary)] border border-[var(--border)]">
+                                <div className="flex flex-col gap-1 w-24">
+                                    <div className="flex justify-between items-center text-[10px] font-medium text-[var(--text-tertiary)]">
+                                        <span>{currentWords.toLocaleString()} w</span>
+                                        <span>{Math.round(progressPct * 100)}%</span>
+                                    </div>
+                                    <div className="h-1.5 w-full bg-[var(--surface-secondary)] rounded-full overflow-hidden">
+                                        <div 
+                                            className="h-full rounded-full transition-all duration-500" 
+                                            style={{ 
+                                                width: `${progressPct * 100}%`,
+                                                background: progressPct >= 0.8 ? '#10b981' : progressPct >= 0.3 ? '#f59e0b' : '#ef4444'
+                                            }}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -339,6 +367,57 @@ export function ProjectDashboardContent({ projectId }: { projectId: string }) {
                                 <span className="bg-orange-500 text-white text-[10px] px-1 rounded-full">{alerts.length}</span>
                             )}
                         </button>
+
+                        {/* Readability Score */}
+                        <div className="relative">
+                            <button
+                                onClick={() => setShowReadability(prev => !prev)}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-md)] text-xs font-medium transition-all hover:bg-[var(--surface-tertiary)] cursor-pointer ${showReadability ? 'text-[#8b5cf6]' : 'text-[var(--text-tertiary)]'}`}
+                                title="Chapter Readability & Pacing Analysis"
+                            >
+                                <Activity size={13} />
+                                Metrics
+                            </button>
+
+                            {/* Popup Readability */}
+                            {showReadability && (
+                                <div className="absolute top-10 right-0 w-64 p-4 rounded-lg bg-[var(--surface-secondary)] border border-[var(--border)] shadow-lg z-50">
+                                    <h4 className="text-sm font-bold mb-3 text-[var(--text-primary)]">Readability Analysis</h4>
+                                    
+                                    <div className="flex justify-between items-center mb-2">
+                                        <span className="text-xs text-[var(--text-tertiary)]">Grade Level</span>
+                                        <span className="text-xs font-semibold" style={{ color: readability.fleschKincaid > 70 ? '#10b981' : '#f59e0b' }}>
+                                            {readability.gradeLevel}
+                                        </span>
+                                    </div>
+
+                                    <div className="flex justify-between items-center mb-2">
+                                        <span className="text-xs text-[var(--text-tertiary)]">Flesch Reading Ease</span>
+                                        <span className="text-xs font-semibold text-[var(--text-primary)]">
+                                            {readability.fleschKincaid} / 100
+                                        </span>
+                                    </div>
+
+                                    <div className="flex justify-between items-center mb-2">
+                                        <span className="text-xs text-[var(--text-tertiary)]">Est. Reading Time</span>
+                                        <span className="text-xs font-semibold text-[var(--text-primary)]">
+                                            {readability.readingTimeMinutes} min
+                                        </span>
+                                    </div>
+
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs text-[var(--text-tertiary)]">Words / Sentences</span>
+                                        <span className="text-xs font-semibold text-[var(--text-primary)]">
+                                            {readability.wordCount} / {readability.sentenceCount}
+                                        </span>
+                                    </div>
+                                    
+                                    <div className="mt-4 text-[10px] text-[var(--text-tertiary)] leading-normal">
+                                        Higher score (70+) means easier to read. Bestselling fiction targets 6th-8th grade readability.
+                                    </div>
+                                </div>
+                            )}
+                        </div>
 
                         {/* Summarize / Context */}
                         <button

@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
-import { verifyIdToken, db } from '@/lib/firebase-admin';
+import { verifyIdToken } from '@/lib/firebase-admin';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs/promises';
+import { NEURAL_VOICES } from '@/lib/voices-config';
 
 const execFilePromise = promisify(execFile);
 
@@ -33,9 +34,9 @@ export async function POST(req: Request) {
 
     try {
         let engineVoiceId = voiceId as string;
-        const builtinVoice = await db.collection('voice_catalog').doc(voiceId).get();
-        if (builtinVoice.exists) {
-            engineVoiceId = builtinVoice.data()?.engineVoiceId || voiceId;
+        const voice = NEURAL_VOICES.find(v => v.id === voiceId);
+        if (voice) {
+            engineVoiceId = voice.model;
         }
 
         // ── Whitelist: refuse anything that's not a safe onnx filename ────────

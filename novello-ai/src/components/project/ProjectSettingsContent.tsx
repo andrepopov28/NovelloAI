@@ -17,6 +17,8 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { toast } from 'sonner';
 import { useProjects } from '@/lib/hooks/useProjects';
+import { useChapters } from '@/lib/hooks/useChapters';
+import { useAuth } from '@/lib/hooks/useAuth';
 
 interface OllamaModel {
     name: string;
@@ -27,6 +29,8 @@ interface OllamaModel {
 export function ProjectSettingsContent({ projectId }: { projectId: string }) {
     const router = useRouter();
     const { projects, updateProject, loading: loadingProjects } = useProjects();
+    const { chapters } = useChapters(projectId);
+    const { user } = useAuth();
     const project = projects.find((p) => p.id === projectId);
 
     const [localSettings, setLocalSettings] = useState({
@@ -37,6 +41,7 @@ export function ProjectSettingsContent({ projectId }: { projectId: string }) {
     const [ollamaStatus, setOllamaStatus] = useState<'checking' | 'connected' | 'offline'>('checking');
     const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
     const [scanningOllama, setScanningOllama] = useState(false);
+    const [analyzingStyle, setAnalyzingStyle] = useState(false);
 
     useEffect(() => {
         if (project?.settings) {
@@ -88,6 +93,48 @@ export function ProjectSettingsContent({ projectId }: { projectId: string }) {
         } catch (err) {
             toast.error('Failed to save settings');
             console.error(err);
+        }
+    };
+
+    const handleGenerateStyleProfile = async () => {
+        if (!user || chapters.length === 0) {
+            toast.error('You need at least one written chapter to analyze style.');
+            return;
+        }
+
+        setAnalyzingStyle(true);
+        toast.info('Analyzing chapter texts via Ollama. This may take a moment...');
+        try {
+            // grab first 5 chapters (max ~10k words) for performance
+            const textToAnalyze = chapters
+                .slice(0, 5)
+                .map(c => `[ChapterTitle: ${c.title}]\n${c.content}`)
+                .join('\n\n')
+                .replace(/<[^>]+>/g, ' ');
+
+            const res = await fetch('/api/ai/style', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${user.uid}`,
+                },
+                body: JSON.stringify({
+                    chaptersContent: textToAnalyze,
+                    provider: localSettings.aiProvider,
+                    model: localSettings.modelName || undefined
+                })
+            });
+
+            if (!res.ok) throw new Error('Analysis failed');
+            const styleProfile = await res.json();
+
+            await updateProject(projectId, { styleProfile });
+            toast.success('Style profile generated successfully!');
+        } catch (err) {
+            console.error(err);
+            toast.error('Failed to generate style profile.');
+        } finally {
+            setAnalyzingStyle(false);
         }
     };
 
@@ -174,46 +221,54 @@ export function ProjectSettingsContent({ projectId }: { projectId: string }) {
                     </Card>
                 )}
 
-                {project.styleProfile && (
-                    <Card className="settings-section">
-                        <div className="section-head">
-                            <div className="section-head-left">
-                                <Sparkles size={18} />
-                                <div>
-                                    <h2 className="section-name">Style Profile</h2>
-                                    <p className="section-desc">AI-generated analysis of your writing voice. Used to guide text generation.</p>
-                                </div>
+                <Card className="settings-section">
+                    <div className="section-head">
+                        <div className="section-head-left">
+                            <Sparkles size={18} />
+                            <div>
+                                <h2 className="section-name">Style Profile</h2>
+                                <p className="section-desc">AI-generated analysis of your writing voice. Used to guide text generation.</p>
                             </div>
                         </div>
-                        <div className="section-body">
-                            <div className="style-grid">
-                                <div className="style-item">
-                                    <span className="style-label">Avg Sentence Length</span>
-                                    <span className="style-value">{project.styleProfile.avgSentenceLength} words</span>
-                                </div>
-                                <div className="style-item">
-                                    <span className="style-label">Vocabulary Level</span>
-                                    <span className="style-value capitalize">{project.styleProfile.vocabularyLevel}</span>
-                                </div>
-                                <div className="style-item">
-                                    <span className="style-label">Point of View</span>
-                                    <span className="style-value">{project.styleProfile.povConsistency}</span>
-                                </div>
-                                <div className="style-item">
-                                    <span className="style-label">Tense</span>
-                                    <span className="style-value">{project.styleProfile.tenseUsage}</span>
-                                </div>
-                                <div className="style-item">
-                                    <span className="style-label">Dialogue Ratio</span>
-                                    <span className="style-value">{Math.round(project.styleProfile.dialogueRatio * 100)}%</span>
-                                </div>
+                        <Button onClick={handleGenerateStyleProfile} disabled={analyzingStyle || chapters.length === 0} variant="secondary" size="sm">
+                            {analyzingStyle ? <Loader2 size={14} className="animate-spin mr-1" /> : <RefreshCw size={14} className="mr-1" />}
+                            {project?.styleProfile ? 'Regenerate' : 'Analyze Chapters'}
+                        </Button>
+                    </div>
+                    <div className="section-body">
+                        {!project?.styleProfile ? (
+                            <div className="p-4 bg-[var(--surface-tertiary)] rounded-md text-sm text-[var(--text-tertiary)]">
+                                No style profile generated yet. Click analyze to extract your author voice from existing chapters.
                             </div>
-                            <p className="text-xs text-secondary mt-2">
-                                Novello analyzes your chapters as you write to update this profile.
-                            </p>
+                        ) : (
+                        <div className="style-grid">
+                            <div className="style-item">
+                                <span className="style-label">Avg Sentence Length</span>
+                                <span className="style-value">{project.styleProfile.avgSentenceLength} words</span>
+                            </div>
+                            <div className="style-item">
+                                <span className="style-label">Vocabulary Level</span>
+                                <span className="style-value capitalize">{project.styleProfile.vocabularyLevel}</span>
+                            </div>
+                            <div className="style-item">
+                                <span className="style-label">Point of View</span>
+                                <span className="style-value">{project.styleProfile.povConsistency}</span>
+                            </div>
+                            <div className="style-item">
+                                <span className="style-label">Tense</span>
+                                <span className="style-value">{project.styleProfile.tenseUsage}</span>
+                            </div>
+                            <div className="style-item">
+                                <span className="style-label">Dialogue Ratio</span>
+                                <span className="style-value">{Math.round(project.styleProfile.dialogueRatio * 100)}%</span>
+                            </div>
                         </div>
-                    </Card>
-                )}
+                        )}
+                        <p className="text-xs text-secondary mt-2">
+                            Novello analyzes your chapters to update this profile.
+                        </p>
+                    </div>
+                </Card>
             </div>
 
             <style jsx>{`

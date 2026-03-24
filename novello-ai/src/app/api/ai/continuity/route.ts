@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateJSON, AIProvider } from '@/lib/ai';
 import { CONTINUITY_PROMPT } from '@/lib/prompts';
-import { verifyIdToken, db } from '@/lib/firebase-admin';
-import { LoomEngine } from '@/lib/loom-engine';
-import { Project, Chapter, Entity, Series } from '@/lib/types';
+import { verifyIdToken } from '@/lib/firebase-admin';
 
 export async function POST(req: NextRequest) {
     try {
@@ -20,55 +18,12 @@ export async function POST(req: NextRequest) {
             projectId,
         } = body;
 
-        let entities = manualEntities;
-        let previousContext = manualContext;
-
-        if (projectId && (!manualEntities || !manualContext)) {
-            try {
-                const [projectDoc, chaptersSnap, entitiesSnap] = await Promise.all([
-                    db.collection('projects').doc(projectId).get(),
-                    db.collection('chapters').where('projectId', '==', projectId).get(),
-                    db.collection('entities').where('projectId', '==', projectId).get(),
-                ]);
-
-                // ── Ownership check ────────────────────────────────────────────
-                if (!projectDoc.exists || projectDoc.data()?.userId !== decoded.uid) {
-                    return NextResponse.json({ error: 'Project not found or unauthorized' }, { status: 403 });
-                }
-
-                const projectData = { id: projectDoc.id, ...projectDoc.data() } as Project;
-                const chaptersData = chaptersSnap.docs.map(d => ({ id: d.id, ...d.data() } as Chapter));
-                const entitiesData = entitiesSnap.docs.map(d => ({ id: d.id, ...d.data() } as Entity));
-
-                let seriesData: Series | null = null;
-                if (projectData.seriesId) {
-                    const seriesDoc = await db.collection('series').doc(projectData.seriesId).get();
-                    if (seriesDoc.exists) {
-                        seriesData = { id: seriesDoc.id, ...seriesDoc.data() } as Series;
-                    }
-                }
-
-                previousContext = LoomEngine.assembleContext(
-                    projectData,
-                    chaptersData,
-                    entitiesData,
-                    seriesData,
-                    { currentText: chapterContent || '', includeEntities: false }
-                );
-
-                entities = entitiesData
-                    .map(e => `${e.name} (${e.type}): ${e.description}`)
-                    .join('\n');
-            } catch (err) {
-                console.warn('[Continuity Loom Error]', err);
-            }
-        }
 
         if (!chapterContent) {
             return NextResponse.json({ error: 'Chapter content is required' }, { status: 400 });
         }
 
-        const prompt = CONTINUITY_PROMPT(chapterContent, entities || 'None', previousContext || 'None');
+        const prompt = CONTINUITY_PROMPT(chapterContent, manualEntities || 'None', manualContext || 'None');
 
         const result = await generateJSON({
             prompt,

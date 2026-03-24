@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useAuth } from './useAuth';
+import { getProject, getChapters, getEntities } from '@/lib/local-db';
 
 export interface ChatMessage {
   id: string;
@@ -98,6 +99,13 @@ export function useChat(config: ChatConfig = {}) {
           }
         }
 
+        let projectData, chaptersData, entitiesData;
+        if (projectId) {
+          projectData = await getProject(projectId);
+          chaptersData = await getChapters(projectId);
+          entitiesData = await getEntities(projectId);
+        }
+
         const res = await fetch('/api/ai/generate', {
           method: 'POST',
           headers: {
@@ -110,6 +118,9 @@ export function useChat(config: ChatConfig = {}) {
             model,
             mode: 'stream',
             projectId,
+            projectData,
+            chaptersData,
+            entitiesData,
           }),
           signal: controller.signal,
         });

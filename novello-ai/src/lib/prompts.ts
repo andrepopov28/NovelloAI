@@ -141,3 +141,39 @@ Return a JSON object with a list of alerts:
 If no errors are found, return { "alerts": [] }.
 Return ONLY valid JSON.`;
 }
+
+export function STYLE_PROMPT(chaptersContent: string): string {
+  return `You are an expert literary critic and editor.
+Analyze the following text to determine the author's unique writing style profile.
+
+**Text to Analyze:**
+${chaptersContent}
+
+Determine the following:
+1. Average sentence length (estimate).
+2. Vocabulary level (choose exactly one: "simple", "moderate", "literary").
+3. Point of View consistency (e.g., "First Person past", "Third Person Intimate", etc.).
+4. Tense usage (e.g., "Past tense", "Present tense").
+5. Dialogue ratio (estimate the percentage of text that is dialogue, from 0.0 to 1.0).
+
+Return ONLY a valid JSON object matching this structure exactly:
+{
+  "avgSentenceLength": 12,
+  "vocabularyLevel": "moderate",
+  "povConsistency": "Third Person Limited",
+  "tenseUsage": "Past tense",
+  "dialogueRatio": 0.45
+}`;
+}
+
+export function COVER_PROMPT(title: string, synopsis: string, genre: string): string {
+  return `You are an expert Midjourney and Stable Diffusion prompt engineer.
+Create a highly detailed, comma-separated image generation prompt for a book cover based on the following details:
+
+**Title:** ${title}
+**Genre:** ${genre}
+**Synopsis:** ${synopsis}
+
+Include specific aesthetic keywords, lighting, atmosphere, style (e.g., hyper-realistic, digital illustration, cinematic lighting), and composition.
+Keep it under 60 words. Do NOT include any preamble, explanations, or quotes. Just output the raw image generation prompt string.`;
+}

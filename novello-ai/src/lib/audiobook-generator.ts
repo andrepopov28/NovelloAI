@@ -13,8 +13,8 @@
 
 import path from 'path';
 import fs from 'fs/promises';
-import { createWriteStream } from 'fs';
-import { execFile } from 'child_process';
+import { createWriteStream, createReadStream } from 'fs';
+import { execFile, execSync, spawn } from 'child_process';
 import { promisify } from 'util';
 import { NEURAL_VOICES } from './voices-config';
 
@@ -25,7 +25,7 @@ const execFileAsync = promisify(execFile);
 const PROJECT_ROOT = process.cwd();
 const PIPER_BIN = path.join(PROJECT_ROOT, 'bin', 'piper', 'piper');
 const VOICES_DIR = path.join(PROJECT_ROOT, 'voices');
-const FFMPEG_BIN = '/opt/homebrew/bin/ffmpeg';
+const FFMPEG_BIN = process.env.FFMPEG_PATH || (() => { try { return execSync('which ffmpeg').toString().trim(); } catch { return '/opt/homebrew/bin/ffmpeg'; } })();
 const OUTPUT_BASE = path.join(PROJECT_ROOT, 'public', 'audiobooks');
 
 // ─── Cancel registry ──────────────────────────────────────────────────────────
@@ -55,9 +55,41 @@ export interface AudiobookChapter {
 
 export interface AudiobookSettings {
     voiceId: string;
+    dialogueVoiceId?: string;
     speed: number;
     pauseDurationMs: number;
+    bitrateKbps?: number;
     language: string;
+}
+
+export interface TextChunk {
+    type: 'narration' | 'dialogue';
+    text: string;
+}
+
+function extractDialogueChunks(text: string): TextChunk[] {
+    const chunks: TextChunk[] = [];
+    const regex = /(['"“‘])(.*?)\1/g;
+    
+    let lastIndex = 0;
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+        if (match.index > lastIndex) {
+            const narration = text.substring(lastIndex, match.index).trim();
+            if (narration) chunks.push({ type: 'narration', text: narration });
+        }
+        const dialogue = match[2].trim();
+        // Keep quotes for TTS inflection parsing
+        if (dialogue) chunks.push({ type: 'dialogue', text: match[0] });
+        lastIndex = regex.lastIndex;
+    }
+    
+    if (lastIndex < text.length) {
+        const remaining = text.substring(lastIndex).trim();
+        if (remaining) chunks.push({ type: 'narration', text: remaining });
+    }
+    
+    return chunks.length > 0 ? chunks : [{ type: 'narration', text }];
 }
 
 export interface ProgressEvent {
@@ -127,8 +159,8 @@ async function synthesiseChapter(
 
     // More reliable: spawn with stdin pipe
     await new Promise<void>((resolve, reject) => {
-        const txt = require('fs').createReadStream(tmpTxt);
-        const proc = require('child_process').spawn(PIPER_BIN, piperArgs, {
+        const txt = createReadStream(tmpTxt);
+        const proc = spawn(PIPER_BIN, piperArgs, {
             stdio: ['pipe', 'ignore', 'pipe'],
         });
         txt.pipe(proc.stdin);
@@ -156,6 +188,7 @@ async function concatenateToM4B(
     bookTitle: string,
     exportDir: string,
     exportId: string,
+    bitrateKbps: number,
 ): Promise<{ outputPath: string; durationSeconds: number }> {
     // Write ffmpeg concat list file  
     const concatListPath = path.join(exportDir, 'concat.txt');
@@ -196,7 +229,8 @@ async function concatenateToM4B(
 
     // Build chapter metadata for ffmpeg
     const metadataPath = path.join(exportDir, 'chapters.ffmeta');
-    const metaLines = [';FFMETADATA1', `title=${bookTitle}`, ''];
+    const safeBookTitle = bookTitle.replace(/[\r\n]/g, ' ');
+    const metaLines = [';FFMETADATA1', `title=${safeBookTitle}`, ''];
 
     // Get durations of each wav for chapter timestamps
     let cursor = 0;
@@ -255,7 +289,7 @@ async function concatenateToM4B(
         '-i', metadataPath,
         '-map_metadata', '1',
         '-c:a', 'aac',
-        '-b:a', '64k',
+        '-b:a', `${bitrateKbps}k`,
         '-movflags', '+faststart',
         '-y',
         outputM4B,
@@ -295,6 +329,11 @@ export async function* generateAudiobook(
     const wavFiles: string[] = [];
     const chapterTitles: string[] = [];
 
+    const narratorVoice = NEURAL_VOICES.find((v) => v.id === settings.voiceId) ?? NEURAL_VOICES[0];
+    const dialogueVoice = settings.dialogueVoiceId 
+        ? (NEURAL_VOICES.find((v) => v.id === settings.dialogueVoiceId) ?? narratorVoice)
+        : narratorVoice;
+
     // ── Phase 1: Synthesise each chapter ──────────────────────────────────────
     for (let i = 0; i < chapters.length; i++) {
         if (isJobCancelled(exportId)) {
@@ -319,7 +358,40 @@ export async function* generateAudiobook(
         const wavOut = path.join(exportDir, `ch_${String(i).padStart(3, '0')}.wav`);
 
         try {
-            await synthesiseChapter(plainText, voice.model, wavOut, settings.speed);
+            if (!settings.dialogueVoiceId || settings.dialogueVoiceId === settings.voiceId) {
+                // Standard single-voice path
+                await synthesiseChapter(plainText, narratorVoice.model, wavOut, settings.speed);
+            } else {
+                // Multi-voice chunking path
+                const chunks = extractDialogueChunks(plainText);
+                const chunkWavs: string[] = [];
+                
+                for (let c = 0; c < chunks.length; c++) {
+                    const chunk = chunks[c];
+                    const chunkWav = path.join(exportDir, `ch_${i}_chunk_${c}.wav`);
+                    const model = chunk.type === 'dialogue' ? dialogueVoice.model : narratorVoice.model;
+                    await synthesiseChapter(chunk.text, model, chunkWav, settings.speed);
+                    chunkWavs.push(chunkWav);
+                }
+                
+                // Concat chunks into chapter WAV
+                const concatListPath = path.join(exportDir, `concat_ch_${i}.txt`);
+                const lines = chunkWavs.map(w => `file '${w}'`);
+                await fs.writeFile(concatListPath, lines.join('\n'), 'utf-8');
+                
+                await execFileAsync(FFMPEG_BIN, [
+                    '-f', 'concat',
+                    '-safe', '0',
+                    '-i', concatListPath,
+                    '-c', 'copy',
+                    '-y',
+                    wavOut,
+                ]);
+                
+                // Cleanup chunks
+                await fs.unlink(concatListPath).catch(() => {});
+                for (const w of chunkWavs) await fs.unlink(w).catch(() => {});
+            }
             wavFiles.push(wavOut);
         } catch (err: any) {
             yield {
@@ -347,7 +419,7 @@ export async function* generateAudiobook(
     let durationSeconds: number;
 
     try {
-        const result = await concatenateToM4B(wavFiles, settings.pauseDurationMs, chapterTitles, bookTitle, exportDir, exportId);
+        const result = await concatenateToM4B(wavFiles, settings.pauseDurationMs, chapterTitles, bookTitle, exportDir, exportId, settings.bitrateKbps || 64);
         outputPath = result.outputPath;
         durationSeconds = result.durationSeconds;
     } catch (err: any) {

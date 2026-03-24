@@ -34,6 +34,12 @@ const settingsNav = [
         href: '/settings/themes',
         image: '/settings-heroes/themes.png',
         desc: 'Appearance & color',
+    },
+    {
+        label: 'Data & Backups',
+        href: '/settings/data',
+        image: '/settings-heroes/profile.png',
+        desc: 'Export & Restore DB',
     }
 ];
 
