@@ -120,9 +120,33 @@ const PLAY_THEME_AVATARS: Record<string, string> = {
     publish: '/images/avatars/play/bart.png',
 };
 
+const FUTURO_THEME_AVATARS: Record<string, string> = {
+    default: '/images/avatars/futuro/narrator.png',
+    write: '/images/avatars/futuro/narrator.png',
+    brainstorm: '/images/avatars/futuro/stylist.png',
+    codex: '/images/avatars/futuro/architect.png',
+    audiobook: '/images/avatars/futuro/editor.png',
+    publish: '/images/avatars/futuro/strategist.png',
+};
+
+const GLOBAL_THEME_AVATARS: Record<string, string> = {
+    default: '/images/avatars/global/architect.png',
+    write: '/images/avatars/global/architect.png',
+    brainstorm: '/images/avatars/global/stylist.png',
+    codex: '/images/avatars/global/architect.png',
+    audiobook: '/images/avatars/global/narrator.png',
+    publish: '/images/avatars/global/strategist.png',
+};
+
 function getThemeAvatar(theme: Theme, persona: Persona): string {
     if (theme === 'play') {
         return PLAY_THEME_AVATARS[persona.key] || PLAY_THEME_AVATARS.default;
+    }
+    if (theme === 'futuro') {
+        return FUTURO_THEME_AVATARS[persona.key] || FUTURO_THEME_AVATARS.default;
+    }
+    if (theme === 'global') {
+        return GLOBAL_THEME_AVATARS[persona.key] || GLOBAL_THEME_AVATARS.default;
     }
     return THEME_AVATARS[theme] ?? persona.avatar;
 }
