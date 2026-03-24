@@ -62,10 +62,21 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
             <ActiveProjectProvider>
                 <ErrorBoundary>
                     <GlobalNav />
-                    <main className="flex-1 overflow-auto relative p-6">
+                    <main
+                        className="flex-1 overflow-y-auto relative"
+                        style={{
+                            paddingTop: 'var(--nav-height, 80px)',
+                            paddingRight: 'var(--chatbox-width, 320px)',
+                            paddingLeft: '0px',
+                            paddingBottom: '0px',
+                            minHeight: '100vh',
+                        }}
+                    >
+                        <div style={{ padding: '1.5rem' }}>
                         <Suspense fallback={<div className="p-8 text-center text-secondary">Loading...</div>}>
                             {children}
                         </Suspense>
+                        </div>
                     </main>
                     <AIChatbox />
                     <ProjectLedger />
