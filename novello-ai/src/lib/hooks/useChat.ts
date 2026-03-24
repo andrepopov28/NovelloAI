@@ -19,8 +19,8 @@ export interface ChatConfig {
   model?: string;
 }
 
-const CHAT_HISTORY_KEY = (projectId: string, personaId: string) =>
-  `novello_chat_${projectId}_${personaId}`;
+const CHAT_HISTORY_KEY = (projectId: string) =>
+  `novello_chat_${projectId}_unified`;
 
 export function useChat(config: ChatConfig = {}) {
   const { projectId, personaId, systemPrompt: customPrompt, provider, model } = config;
@@ -32,27 +32,27 @@ export function useChat(config: ChatConfig = {}) {
 
   // Load chat history from localStorage on mount
   useEffect(() => {
-    if (!projectId || !personaId) return;
+    if (!projectId) return;
     try {
-      const stored = localStorage.getItem(CHAT_HISTORY_KEY(projectId, personaId));
+      const stored = localStorage.getItem(CHAT_HISTORY_KEY(projectId));
       if (stored) {
         setMessages(JSON.parse(stored));
       }
     } catch { /* ignore parse errors */ }
-  }, [projectId, personaId]);
+  }, [projectId]);
 
   // Persist messages to localStorage whenever they update
   useEffect(() => {
-    if (!projectId || !personaId || messages.length === 0) return;
+    if (!projectId || messages.length === 0) return;
     try {
       // Keep last 50 messages to avoid storage bloat
       const toStore = messages.slice(-50);
-      localStorage.setItem(CHAT_HISTORY_KEY(projectId, personaId), JSON.stringify(toStore));
+      localStorage.setItem(CHAT_HISTORY_KEY(projectId), JSON.stringify(toStore));
     } catch { /* ignore storage errors */ }
-  }, [messages, projectId, personaId]);
+  }, [messages, projectId]);
 
   const sendMessage = useCallback(
-    async (content: string, context?: { projectTitle?: string; chapterContent?: string }) => {
+    async (content: string, context?: { projectTitle?: string; chapterContent?: string; overrideSystemPrompt?: string }) => {
       if (!content.trim() || isStreaming) return;
 
       const userMsg: ChatMessage = {
@@ -79,7 +79,7 @@ export function useChat(config: ChatConfig = {}) {
       abortRef.current = controller;
 
       try {
-        let systemPrompt = customPrompt ||
+        let systemPrompt = context?.overrideSystemPrompt || customPrompt ||
           'You are Novello AI, a creative writing assistant. Be helpful, concise, and inspiring. Help the writer with their creative process.';
         if (context?.projectTitle) {
           systemPrompt += `\n\nThe writer is currently working on a project titled "${context.projectTitle}".`;
@@ -189,10 +189,10 @@ export function useChat(config: ChatConfig = {}) {
   const clearMessages = useCallback(() => {
     setMessages([]);
     setError(null);
-    if (projectId && personaId) {
-      localStorage.removeItem(CHAT_HISTORY_KEY(projectId, personaId));
+    if (projectId) {
+      localStorage.removeItem(CHAT_HISTORY_KEY(projectId));
     }
-  }, [projectId, personaId]);
+  }, [projectId]);
 
   return { messages, isStreaming, error, sendMessage, cancelStream, clearMessages };
 }

@@ -185,7 +185,7 @@ export function AIChatbox() {
 
     const { messages, isStreaming, sendMessage, cancelStream, clearMessages } = useChat({
         projectId,
-        personaId: basePersona.key,
+        personaId: 'unified', // Use a single unified ID for project-wide memory
         systemPrompt: personaSettings.personality,
         provider: personaSettings.provider,
         model: personaSettings.model,
@@ -247,7 +247,9 @@ export function AIChatbox() {
         const text = input.trim();
         if (!text || isStreaming) return;
         setInput('');
-        sendMessage(text);
+        sendMessage(text, {
+            overrideSystemPrompt: personaSettings.personality
+        });
     };
 
     const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
