@@ -5,7 +5,7 @@ import { CHAPTER_TEMPLATES, getTemplatesByCategory, ChapterTemplate } from '@/li
 import { X, BookOpen, ChevronRight, Check } from 'lucide-react';
 
 interface TemplatePickerModalProps {
-    onSelect: (template: ChapterTemplate) => void;
+    onSelect: (template: ChapterTemplate | null) => void;
     onClose: () => void;
 }
 
@@ -98,10 +98,15 @@ export function TemplatePickerModal({ onSelect, onClose }: TemplatePickerModalPr
                 </div>
 
                 {/* Footer */}
-                <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: 10, background: 'var(--surface-secondary)', flexShrink: 0 }}>
+                <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-secondary)', flexShrink: 0 }}>
                     <button onClick={onClose} style={{ padding: '0.5rem 1rem', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.85rem' }}>
                         Cancel
                     </button>
+                    <div style={{ display: 'flex', gap: 10 }}>
+                        <button onClick={() => onSelect(null)} style={{ padding: '0.5rem 1rem', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-primary)', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}>
+                            + Blank Chapter
+                        </button>
+
                     <button
                         onClick={handleSelect}
                         disabled={!selected}
@@ -109,6 +114,7 @@ export function TemplatePickerModal({ onSelect, onClose }: TemplatePickerModalPr
                     >
                         <Check size={14} /> Use Template
                     </button>
+                    </div>
                 </div>
             </div>
         </div>

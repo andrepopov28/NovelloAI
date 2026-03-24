@@ -33,8 +33,8 @@ export async function POST(req: NextRequest) {
         );
 
         // Ghost Writer always streams — returns HTML content
-        const { generateStream } = await import('@/lib/ai');
-        const stream = generateStream({
+        const { streamGenerate } = await import('@/lib/ai');
+        const { textStream } = await streamGenerate({
             prompt,
             provider: provider as AIProvider,
             model,
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
         const encoder = new TextEncoder();
         const readable = new ReadableStream({
             async start(controller) {
-                for await (const chunk of stream) {
+                for await (const chunk of textStream) {
                     controller.enqueue(encoder.encode(chunk));
                 }
                 controller.close();

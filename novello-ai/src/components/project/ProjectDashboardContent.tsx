@@ -11,6 +11,12 @@ import { useAI } from '@/lib/hooks/useAI';
 import { useProjects } from '@/lib/hooks/useProjects';
 import { TipTapEditor } from '@/components/editor/TipTapEditor';
 import { ChapterSidebar } from '@/components/editor/ChapterSidebar';
+import { ProseCoach } from '@/components/editor/ProseCoach';
+import { CritiquePanel } from '@/components/editor/CritiquePanel';
+import { StreakCalendar } from '@/components/editor/StreakCalendar';
+import { useWritingSession } from '@/lib/hooks/useWritingSession';
+import { TemplatePickerModal } from '@/components/project/TemplatePickerModal';
+import type { ChapterTemplate } from '@/lib/chapter-templates';
 
 import { SyncIndicator } from '@/components/layout/SyncIndicator';
 import { Button } from '@/components/ui/Button';
@@ -41,6 +47,7 @@ export function ProjectDashboardContent({ projectId }: { projectId: string }) {
     const [showHistory, setShowHistory] = useState(false);
     const [showAlerts, setShowAlerts] = useState(false);
     const [showReadability, setShowReadability] = useState(false);
+    const [showTemplateModal, setShowTemplateModal] = useState(false);
 
     // Get active chapter
     const activeChapter = chapters.find((c) => c.id === activeChapterId) || null;
@@ -58,6 +65,14 @@ export function ProjectDashboardContent({ projectId }: { projectId: string }) {
         }
     }, [chapters, loading, activeChapterId]);
 
+    // Live word count for the current typing session
+    const currentSessionWords = useMemo(() => {
+        if (!editorContent) return 0;
+        return editorContent.replace(/<[^>]*>?/gm, '').split(/\s+/).filter(Boolean).length;
+    }, [editorContent]);
+
+    const { sessions, streak, todayWords } = useWritingSession(projectId, currentSessionWords);
+
     // Auto-save — disabled during AI generation to prevent debounce churn while streaming
     const { syncStatus } = useAutoSave(activeChapterId, projectId, editorContent, aiLoading);
 
@@ -72,11 +87,37 @@ export function ProjectDashboardContent({ projectId }: { projectId: string }) {
         [chapters]
     );
 
-    const handleAddChapter = useCallback(async () => {
-        const order = chapters.length;
-        const id = await createChapter({ title: `Chapter ${order + 1}`, order });
-        setActiveChapterId(id);
-        setEditorContent('');
+    const handleAddChapterClick = useCallback(() => {
+        setShowTemplateModal(true);
+    }, []);
+
+    const handleApplyTemplate = useCallback(async (tpl: ChapterTemplate | null) => {
+        setShowTemplateModal(false);
+        const startIndex = chapters.length;
+
+        if (!tpl) {
+            // Blank chapter
+            const id = await createChapter({ title: `Chapter ${startIndex + 1}`, order: startIndex });
+            setActiveChapterId(id);
+            setEditorContent('');
+        } else {
+            // Bulk create from template
+            let firstId: string | null = null;
+            for (let i = 0; i < tpl.chapters.length; i++) {
+                const chapterDef = tpl.chapters[i];
+                const id = await createChapter({
+                    title: chapterDef.title,
+                    synopsis: chapterDef.synopsis,
+                    order: startIndex + i
+                });
+                if (i === 0) firstId = id;
+            }
+            if (firstId) {
+                setActiveChapterId(firstId);
+                // content will update via chapter selection
+            }
+            toast.success(`Applied ${tpl.name} template (${tpl.chapters.length} chapters)`);
+        }
     }, [chapters.length, createChapter]);
 
     const handleDeleteChapter = useCallback(
@@ -274,7 +315,7 @@ export function ProjectDashboardContent({ projectId }: { projectId: string }) {
                 chapters={chapters}
                 activeChapterId={activeChapterId}
                 onSelect={handleSelectChapter}
-                onAdd={handleAddChapter}
+                onAdd={handleAddChapterClick}
                 onDelete={handleDeleteChapter}
             />
 
@@ -526,6 +567,34 @@ export function ProjectDashboardContent({ projectId }: { projectId: string }) {
                 </div>
             </div>
 
+            {/* Right Sidebar (AI Tools & Stats) */}
+            <aside 
+                className="flex flex-col h-full border-l overflow-y-auto w-[var(--sidebar-width)] xl:w-80 shrink-0"
+                style={{ borderColor: 'var(--border)', background: 'var(--surface-primary)' }}
+            >
+                <div className="p-4 border-b" style={{ borderColor: 'var(--border)' }}>
+                    <StreakCalendar 
+                        sessions={sessions} 
+                        streak={streak} 
+                        todayWords={todayWords} 
+                        dailyGoal={activeProject?.targetWordCount ? Math.floor(activeProject.targetWordCount / 90) : 500} 
+                    />
+                </div>
+                
+                {activeChapter && (
+                    <>
+                        <ProseCoach content={editorContent} />
+                        <CritiquePanel 
+                            chapterId={activeChapter.id}
+                            chapterTitle={activeChapter.title}
+                            chapterContent={editorContent}
+                            projectId={projectId}
+                            context={rollingContext}
+                        />
+                    </>
+                )}
+            </aside>
+
             {/* Version History Panel */}
             <VersionHistory
                 isOpen={showHistory}
@@ -545,6 +614,14 @@ export function ProjectDashboardContent({ projectId }: { projectId: string }) {
                 onDismiss={dismissAlert}
                 onCheckNow={() => activeChapterId && checkContinuity(editorContent, activeChapterId)}
             />
+
+            {/* Template Picker Modal */}
+            {showTemplateModal && (
+                <TemplatePickerModal
+                    onSelect={handleApplyTemplate}
+                    onClose={() => setShowTemplateModal(false)}
+                />
+            )}
         </div>
     );
 }
