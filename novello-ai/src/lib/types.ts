@@ -308,6 +308,41 @@ export interface Bookmark {
 
 export type SyncStatus = 'idle' | 'saving' | 'saved' | 'offline' | 'error';
 
+export interface WritingSession {
+    id: string; // projectId + date e.g. 'proj123-2026-03-24'
+    projectId: string;
+    userId: string;
+    date: string; // YYYY-MM-DD
+    wordsWritten: number;
+    sessionStartedAt: number;
+    updatedAt: number;
+}
+
+export interface ChapterCritique {
+    id: string; // critique id
+    chapterId: string;
+    projectId: string;
+    userId: string;
+    overallScore: number; // 1-10
+    pacing: { score: number; feedback: string };
+    tension: { score: number; feedback: string };
+    characterVoice: { score: number; feedback: string };
+    hookStrength: { score: number; feedback: string };
+    highlights: string[];
+    suggestions: string[];
+    createdAt: number;
+}
+
+export interface PlotThread {
+    id: string;
+    title: string;
+    introducedInChapter: string;
+    lastMentionedInChapter: string | null;
+    status: 'open' | 'resolved' | 'dangling';
+    description: string;
+    characters: string[];
+}
+
 export interface AIRequest {
     prompt: string;
     provider: AIProvider;

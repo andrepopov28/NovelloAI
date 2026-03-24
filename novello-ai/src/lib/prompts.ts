@@ -177,3 +177,89 @@ Create a highly detailed, comma-separated image generation prompt for a book cov
 Include specific aesthetic keywords, lighting, atmosphere, style (e.g., hyper-realistic, digital illustration, cinematic lighting), and composition.
 Keep it under 60 words. Do NOT include any preamble, explanations, or quotes. Just output the raw image generation prompt string.`;
 }
+
+export function CRITIQUE_PROMPT(chapterTitle: string, chapterContent: string, context?: string): string {
+  const contextBlock = context ? `\n**Story Context:**\n${context}\n` : '';
+  return `You are an expert beta reader and developmental editor with 20 years of experience in fiction.
+Please provide a structured critique of the following chapter.
+
+**Chapter:** ${chapterTitle}
+${contextBlock}
+**Chapter Content:**
+${chapterContent.slice(0, 8000)}
+
+Analyze the following dimensions and return a JSON response:
+{
+  "overallScore": 7,
+  "pacing": { "score": 7, "feedback": "Specific feedback on pacing..." },
+  "tension": { "score": 8, "feedback": "Specific feedback on tension..." },
+  "characterVoice": { "score": 6, "feedback": "Specific feedback on character voice..." },
+  "hookStrength": { "score": 9, "feedback": "Specific feedback on hook/opening..." },
+  "highlights": ["What worked really well...", "Another strong point..."],
+  "suggestions": ["Most important improvement...", "Second suggestion...", "Third suggestion..."]
+}
+
+Scoring: 1-4 needs work, 5-6 solid, 7-8 strong, 9-10 excellent.
+Be specific — quote directly from the text when possible.
+Return ONLY valid JSON.`;
+}
+
+export function PLOT_HOLE_PROMPT(chaptersJson: string, entitiesJson: string): string {
+  return `You are The Archivist, an expert story continuity analyst.
+Analyze the following chapters and entity codex for open plot threads, unresolved setups, and character inconsistencies.
+
+**Chapter Summaries (JSON):**
+${chaptersJson}
+
+**Entity Codex (JSON):**
+${entitiesJson}
+
+Identify:
+1. Plot threads introduced but never resolved (setups without payoffs)
+2. Characters who appear early but disappear without explanation
+3. Objects or MacGuffins mentioned but forgotten
+4. Timeline inconsistencies across chapters
+5. Promise-breaking (author promised something to reader that was never delivered)
+
+Return a JSON object:
+{
+  "openThreads": [
+    {
+      "id": "unique-id",
+      "title": "Thread name",
+      "introducedInChapter": "Chapter 2",
+      "lastMentionedInChapter": "Chapter 4",
+      "status": "dangling",
+      "description": "What was introduced and what was expected",
+      "characters": ["CharacterName"]
+    }
+  ],
+  "summary": "Brief overall assessment"
+}
+
+If no issues found, return { "openThreads": [], "summary": "No open threads detected. Good narrative cohesion." }
+Return ONLY valid JSON.`;
+}
+
+export function GHOST_WRITER_PROMPT(title: string, synopsis: string, context: string, style: StyleProfile | null, wordTarget = 1500): string {
+  let styleBlock = '';
+  if (style) {
+    styleBlock = `\n**Voice & Style (Must Match):**
+- Sentence length: ~${style.avgSentenceLength} words avg
+- Vocabulary: ${style.vocabularyLevel}
+- POV: ${style.povConsistency}
+- Tense: ${style.tenseUsage}
+- Dialogue ratio: ~${Math.round(style.dialogueRatio * 100)}%`;
+  }
+  return `You are a ghostwriter writing in the established voice of this novel.
+
+**Story Context:**
+${context}${styleBlock}
+
+**This Chapter:**
+Title: ${title}
+Synopsis: ${synopsis}
+
+Write approximately ${wordTarget} words. Write ONLY the chapter content in HTML (using <p>, <em>, <strong> tags).
+No chapter titles, no preamble, no meta-commentary.`;
+}

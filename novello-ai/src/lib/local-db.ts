@@ -1,7 +1,8 @@
 import { openDB, IDBPDatabase } from 'idb';
-import { Project, Chapter, Entity, Series, VoiceClone } from './types';
+import { Project, Chapter, Entity, Series, VoiceClone, WritingSession, ChapterCritique } from './types';
 
 const DB_NAME = 'novello-ai-local';
+
 
 interface NovelloSchema {
   projects: {
@@ -32,6 +33,16 @@ interface NovelloSchema {
   versions: {
     key: string;
     value: import('./types').ChapterVersion;
+    indexes: { 'by-chapter': string };
+  };
+  writing_sessions: {
+    key: string;
+    value: WritingSession;
+    indexes: { 'by-project': string; 'by-date': string };
+  };
+  chapter_critiques: {
+    key: string;
+    value: ChapterCritique;
     indexes: { 'by-chapter': string };
   };
 }
@@ -68,6 +79,15 @@ export const getDB = () => {
         if (oldVersion < 3) {
           const versionsStore = db.createObjectStore('versions', { keyPath: 'id' });
           versionsStore.createIndex('by-chapter', 'chapterId');
+        }
+        // Version 4 — writing sessions + chapter critiques
+        if (oldVersion < 4) {
+          const sessionsStore = db.createObjectStore('writing_sessions', { keyPath: 'id' });
+          sessionsStore.createIndex('by-project', 'projectId');
+          sessionsStore.createIndex('by-date', 'date');
+
+          const critiquesStore = db.createObjectStore('chapter_critiques', { keyPath: 'id' });
+          critiquesStore.createIndex('by-chapter', 'chapterId');
         }
       },
     });
@@ -228,3 +248,33 @@ export async function importDatabase(jsonData: string) {
 
   await tx.done;
 }
+
+/* ─── Writing Session Operations ─────────────────────────────── */
+export async function saveWritingSession(session: WritingSession) {
+  const db = await getDB();
+  await db.put('writing_sessions', session);
+}
+
+export async function getSessionsForProject(projectId: string): Promise<WritingSession[]> {
+  const db = await getDB();
+  return db.getAllFromIndex('writing_sessions', 'by-project', projectId);
+}
+
+export async function getSessionForDate(projectId: string, date: string): Promise<WritingSession | undefined> {
+  const db = await getDB();
+  const all = await db.getAllFromIndex('writing_sessions', 'by-project', projectId);
+  return all.find(s => s.date === date);
+}
+
+/* ─── Chapter Critique Operations ────────────────────────────── */
+export async function saveChapterCritique(critique: ChapterCritique) {
+  const db = await getDB();
+  await db.put('chapter_critiques', critique);
+}
+
+export async function getCritiqueForChapter(chapterId: string): Promise<ChapterCritique | undefined> {
+  const db = await getDB();
+  const results = await db.getAllFromIndex('chapter_critiques', 'by-chapter', chapterId);
+  return results.sort((a, b) => b.createdAt - a.createdAt)[0];
+}
+

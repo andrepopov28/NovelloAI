@@ -4,6 +4,9 @@ export interface ReadabilityMetrics {
   readingTimeMinutes: number;
   wordCount: number;
   sentenceCount: number;
+  avgSentenceLength: number;
+  passiveVoiceCount: number; // percentage
+  adverbCount: number;
 }
 
 // Simple syllable counter
@@ -24,6 +27,9 @@ export function analyzeReadability(htmlContent: string): ReadabilityMetrics {
       readingTimeMinutes: 0,
       wordCount: 0,
       sentenceCount: 0,
+      avgSentenceLength: 0,
+      passiveVoiceCount: 0,
+      adverbCount: 0,
     };
   }
 
@@ -61,7 +67,18 @@ export function analyzeReadability(htmlContent: string): ReadabilityMetrics {
     else gradeLevel = 'College Graduate';
   }
 
-  // Avg reading speed: 250 wpm
+  // Passive voice (rough heuristic: 'was/were/is/are/been + past participle')
+  const passiveMatches = text.match(/\b(was|were|is|are|been|be|being)\s+\w+ed\b/gi) || [];
+  const passiveVoiceCount = sentenceCount > 0 ? Math.round((passiveMatches.length / sentenceCount) * 100) : 0;
+
+  // Adverbs (words ending in 'ly' with 4+ chars)
+  const adverbMatches = words.filter(w => w.length >= 4 && w.toLowerCase().endsWith('ly'));
+  const adverbCount = adverbMatches.length;
+
+  // Avg sentence length
+  const avgSentenceLength = sentenceCount > 0 ? Math.round((wordCount / sentenceCount) * 10) / 10 : 0;
+
+  // Reading time at 250 wpm
   const readingTimeMinutes = Math.ceil(wordCount / 250);
 
   return {
@@ -70,5 +87,8 @@ export function analyzeReadability(htmlContent: string): ReadabilityMetrics {
     readingTimeMinutes,
     wordCount,
     sentenceCount,
+    avgSentenceLength,
+    passiveVoiceCount,
+    adverbCount,
   };
 }

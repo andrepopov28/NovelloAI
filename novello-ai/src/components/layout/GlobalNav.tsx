@@ -58,6 +58,9 @@ const projectNavNodes = [
         key: 'write', label: 'Write', icon: PenTool, path: '', image: STITCH_IMGS.write,
         subNodes: [
             { label: 'Editor', description: 'Write your manuscript', path: '' },
+            { label: 'Board View', description: 'Scene cards, drag & drop', path: '/board' },
+            { label: 'Ghost Writer', description: 'AI autonomous chapter drafting', path: '/ghost-writer' },
+            { label: 'Plot Holes', description: 'Open thread detector', path: '/plot-holes' },
             { label: 'Continuity', description: 'Check manuscript consistency', path: '/continuity' }
         ]
     },
