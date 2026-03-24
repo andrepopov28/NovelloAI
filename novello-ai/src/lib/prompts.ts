@@ -1,5 +1,5 @@
 // =============================================
-// Novello AI v19 — Prompt Templates
+// Novello AI v33 — Prompt Templates
 // Centralized, versioned prompts for all AI features.
 // =============================================
 

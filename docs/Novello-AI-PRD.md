@@ -1,8 +1,8 @@
 # Novello AI — PRD V33
 **Status:** Production-Ready (Build Complete)  
 **Supersedes:** V32  
-**Last Updated:** 2026-02-22  
-**Build Commit:** TBD  
+**Last Updated:** 2026-03-24  
+**Build Commit:** Cleanup & doc refresh
 
 ---
 

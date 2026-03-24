@@ -45,8 +45,8 @@ This document outlines the manual steps to verify the critical path of the Novel
 - [ ] Verify that an HTML file is downloaded to your machine named `manuscript-[projectId].html`.
 - [ ] Open the HTML file in a browser, trigger the print dialog (Cmd/Ctrl + P), and save as PDF.
 
-## 7. Audiobook / Voice (Browser Native)
+## 7. Audiobook / Voice (Piper & Browser Native)
 - [ ] Navigate to the "Audiobook" tab for your project.
-- [ ] Confirm that "Browser Voice" is the only active TTS Provider.
+- [ ] Confirm that "Piper TTS" and "Browser Voice" are active TTS Providers.
 - [ ] Click "Play". 
 - [ ] Verify that the chapter text is read aloud using the browser's built-in synth voice.
