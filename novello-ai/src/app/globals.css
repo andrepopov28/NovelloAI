@@ -814,3 +814,247 @@ h4 {
 [data-theme="eink"] .theme-swatch {
   border-color: rgba(45, 45, 45, 0.15);
 }
+
+/* ============================================================
+   NOVELLO AI — PER-THEME UI REFINEMENTS v2
+   Nav tabs, buttons, toolbar, and body typography
+   all adapt to the active theme identity.
+   ============================================================ */
+
+/* ── Universal Toolbar + Button Fixes ─────────────────────── */
+
+/* Prevent ALL toolbar/nav button labels from wrapping */
+nav button,
+nav a span,
+[role="toolbar"] button,
+[role="toolbar"] a {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The secondary toolbar row that wraps the Write-with-AI, Export PDF, EPUB buttons */
+.editor-toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.editor-toolbar-row::-webkit-scrollbar { display: none; }
+
+/* ── Nav Tabs: reduce min-width so more tabs fit ──────────── */
+nav a[class*="min-w-"] {
+  min-width: 120px !important;
+  padding-left: 20px !important;
+  padding-right: 20px !important;
+}
+
+/* ── GLOBAL THEME (Apple Light) ──────────────────────────── */
+[data-theme="global"] body {
+  background: var(--surface-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+
+/* Nav tabs — crisp, light letterpress style */
+[data-theme="global"] nav a span {
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--text-secondary);
+}
+[data-theme="global"] nav a:hover span,
+[data-theme="global"] nav a[aria-current] span {
+  color: var(--text-primary);
+}
+
+/* Buttons — Apple-blue with crisp borders */
+[data-theme="global"] button.inline-flex {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+[data-theme="global"] .premium-card {
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm), 0 0 0 1px var(--border);
+}
+
+/* Section headings in content pages */
+[data-theme="global"] h1,
+[data-theme="global"] h2 {
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+}
+
+/* ── PLAY THEME (Dim Warm Amber-Teal) ────────────────────── */
+[data-theme="play"] body {
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+/* Nav — warm amber labels with teal hover */
+[data-theme="play"] nav a span {
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+[data-theme="play"] nav a:hover span {
+  color: var(--accent-warm); /* teal hover in play theme */
+}
+[data-theme="play"] nav {
+  border-bottom: 1px solid var(--border);
+}
+
+/* Active nav bar — amber top line */
+[data-theme="play"] nav a[class*="bg-"] {
+  background: rgba(245, 166, 35, 0.06) !important;
+}
+
+/* Buttons — subtle warm bg, readable text */
+[data-theme="play"] button.inline-flex {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+[data-theme="play"] button.inline-flex:not([disabled]):hover {
+  box-shadow: 0 0 12px var(--accent-warm-glow);
+}
+
+/* Premium cards — darker surfaces with amber micro-glow */
+[data-theme="play"] .premium-card {
+  background: var(--surface-secondary);
+  border-color: var(--border);
+  transition: box-shadow 200ms ease, transform 200ms ease;
+}
+[data-theme="play"] .premium-card:hover {
+  box-shadow: var(--shadow-md), 0 0 20px rgba(245, 166, 35, 0.08);
+}
+
+/* Headings — warmer weight */
+[data-theme="play"] h1,
+[data-theme="play"] h2 {
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: var(--text-primary);
+}
+[data-theme="play"] h3,
+[data-theme="play"] h4 {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* Editor / manuscript area — serif for warmth */
+[data-theme="play"] .ProseMirror,
+[data-theme="play"] .manuscript {
+  font-family: 'Georgia', 'New York', serif;
+  font-size: 1.1rem;
+  line-height: 1.9;
+  color: var(--text-primary);
+}
+
+/* ── FUTURO THEME (Matrix Terminal) ─────────────────────── */
+[data-theme="futuro"] body {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  background: #000;
+  color: #00ff41;
+}
+
+/* Nav — terminal monospace labels */
+[data-theme="futuro"] nav {
+  background: rgba(0, 0, 0, 0.97) !important;
+  border-bottom: 1px solid rgba(0, 255, 65, 0.2) !important;
+}
+[data-theme="futuro"] nav a span {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  color: rgba(0, 255, 65, 0.55);
+  text-transform: uppercase;
+}
+[data-theme="futuro"] nav a:hover span {
+  color: #00ff41;
+  text-shadow: 0 0 8px rgba(0, 255, 65, 0.5);
+}
+[data-theme="futuro"] nav a[class*="bg-"] {
+  background: rgba(0, 255, 65, 0.05) !important;
+}
+
+/* Nav thumbnail images — matrix filter */
+[data-theme="futuro"] nav img {
+  filter: grayscale(1) sepia(1) hue-rotate(100deg) saturate(5) brightness(0.6);
+}
+
+/* Buttons — terminal pill style */
+[data-theme="futuro"] button.inline-flex {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  border-color: rgba(0, 255, 65, 0.25) !important;
+}
+[data-theme="futuro"] button.inline-flex:not([disabled]):hover {
+  box-shadow: 0 0 12px rgba(0, 255, 65, 0.25);
+  border-color: rgba(0, 255, 65, 0.45) !important;
+}
+
+/* Primary accent button — matrix green */
+[data-theme="futuro"] button.inline-flex.bg-\[var\(--accent\)\] {
+  background: rgba(0, 255, 65, 0.12);
+  color: #00ff41;
+  border: 1px solid rgba(0, 255, 65, 0.35);
+  text-shadow: 0 0 8px rgba(0, 255, 65, 0.5);
+}
+
+/* Premium cards — dark terminal surfaces */
+[data-theme="futuro"] .premium-card {
+  background: #060606;
+  border-color: rgba(0, 255, 65, 0.12);
+  border-radius: 4px;
+}
+[data-theme="futuro"] .premium-card:hover {
+  border-color: rgba(0, 255, 65, 0.28);
+  box-shadow: 0 0 20px rgba(0, 255, 65, 0.08);
+}
+
+/* Headings — matrix terminal style */
+[data-theme="futuro"] h1,
+[data-theme="futuro"] h2,
+[data-theme="futuro"] h3,
+[data-theme="futuro"] h4 {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  color: #00ff41;
+  letter-spacing: 0.02em;
+  text-shadow: 0 0 10px rgba(0, 255, 65, 0.3);
+}
+
+/* Editor — monospace for immersion */
+[data-theme="futuro"] .ProseMirror,
+[data-theme="futuro"] .manuscript {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.95rem;
+  line-height: 1.7;
+  color: #00cc33;
+}
+[data-theme="futuro"] .ProseMirror p::before {
+  content: '> ';
+  color: rgba(0, 255, 65, 0.3);
+  font-size: 0.8em;
+}
+
+/* Chatbox — dark terminal panel */
+[data-theme="futuro"] .chatbox-panel {
+  border-left-color: rgba(0, 255, 65, 0.2);
+}
+[data-theme="futuro"] .chatbox-messages {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+}

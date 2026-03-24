@@ -500,9 +500,9 @@ export function ProjectDashboardContent({ projectId }: { projectId: string }) {
                         {/* Export Buttons */}
                         <div className="w-px h-5 mx-1" style={{ background: 'var(--border)' }} />
 
-                        <Button variant="secondary" onClick={handleExportPdf} disabled={chapters.length === 0}>
-                            <Download size={14} />
-                            Print to PDF (HTML)
+                        <Button variant="secondary" size="sm" onClick={handleExportPdf} disabled={chapters.length === 0}>
+                            <Download size={13} />
+                            Export PDF
                         </Button>
                         <Button variant="secondary" onClick={handleExportEpub} disabled={chapters.length === 0}>
                             <Download size={14} />

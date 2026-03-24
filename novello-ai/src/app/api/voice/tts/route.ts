@@ -47,15 +47,36 @@ export async function POST(req: Request) {
         const piperBin = path.join(process.cwd(), 'bin', 'piper', 'piper');
         const modelPath = path.join(process.cwd(), 'voices', engineVoiceId);
 
-        // generate to temp file — no shell, no redirection
+        // generate to temp file
         const tmpId = `${Date.now()}${Math.random().toString(36).substring(7)}`;
         const wavPath = path.join(process.cwd(), 'tmp', `tts_${tmpId}.wav`);
 
-        // Use execFile (no shell) — stdin via pipe, not shell redirection
-        await execFilePromise(piperBin, ['--model', modelPath, '--output_file', wavPath], {
-            input: text,
-            timeout: 30_000,
-        } as any);
+        // Use spawn to stream text reliably to the bash wrapper
+        const { spawn } = require('child_process');
+        await new Promise<void>((resolve, reject) => {
+            const piper = spawn(piperBin, ['--model', modelPath, '--output_file', wavPath], {
+                stdio: ['pipe', 'ignore', 'pipe']
+            });
+            
+            let stderrData = '';
+            piper.stderr.on('data', (data: Buffer) => {
+                stderrData += data.toString();
+            });
+            
+            piper.on('close', (code: number) => {
+                if (code !== 0) {
+                    reject(new Error(`Piper exited with code ${code}: ${stderrData}`));
+                } else {
+                    resolve();
+                }
+            });
+            
+            piper.on('error', (err: Error) => reject(err));
+            
+            // write text and close stdin
+            piper.stdin.write(text);
+            piper.stdin.end();
+        });
 
         const audioBuffer = await fs.readFile(wavPath);
 
@@ -70,7 +91,7 @@ export async function POST(req: Request) {
             },
         });
     } catch (err) {
-        console.error('TTS API Error');
-        return NextResponse.json({ error: 'TTS synthesis failed' }, { status: 500 });
+        console.error('TTS API Error', err);
+        return NextResponse.json({ error: 'TTS synthesis failed', details: String(err) }, { status: 500 });
     }
 }

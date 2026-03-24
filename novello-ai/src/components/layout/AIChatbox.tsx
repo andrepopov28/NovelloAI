@@ -106,13 +106,25 @@ const personas: Record<string, Persona> = {
 // ─── Theme-aware avatar mapping ──────────────────
 // Maps each theme to a photorealistic portrait that matches the aesthetic.
 const THEME_AVATARS: Record<Theme, string> = {
-    play: '/images/avatars/play/stylist.webp',
     global: '/images/avatars/global/stylist.webp',
     futuro: '/images/avatars/futuro/stylist.webp',
+    play: '/images/avatars/play/bugs.png', // Fallback for play
 };
 
-function getThemeAvatar(theme: Theme, personaAvatar: string): string {
-    return THEME_AVATARS[theme] ?? personaAvatar;
+const PLAY_THEME_AVATARS: Record<string, string> = {
+    default: '/images/avatars/play/bugs.png',
+    write: '/images/avatars/play/charlie.png',
+    brainstorm: '/images/avatars/play/panther.png',
+    codex: '/images/avatars/play/kermit.png',
+    audiobook: '/images/avatars/play/tomjerry.png',
+    publish: '/images/avatars/play/bart.png',
+};
+
+function getThemeAvatar(theme: Theme, persona: Persona): string {
+    if (theme === 'play') {
+        return PLAY_THEME_AVATARS[persona.key] || PLAY_THEME_AVATARS.default;
+    }
+    return THEME_AVATARS[theme] ?? persona.avatar;
 }
 
 function getPersonaFromPath(pathname: string): Persona {
@@ -184,7 +196,7 @@ export function AIChatbox() {
 
     const { theme } = useTheme();
     // Use base avatar since we haven't implemented avatar uploads for agents yet
-    const themeAvatar = getThemeAvatar(theme, basePersona.avatar);
+    const themeAvatar = getThemeAvatar(theme, basePersona);
     const displayName = personaSettings.name || basePersona.name;
 
     useEffect(() => {
