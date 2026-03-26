@@ -58,9 +58,9 @@ vi.mock('fs/promises', async () => ({
 }));
 
 // Import the route handlers directly
-import { POST as AudioBookPOST } from '../../src/app/api/ai/audiobook/route';
-import { POST as AudioBookCancelPOST } from '../../src/app/api/ai/audiobook/cancel/route';
-import { POST as VoicePreviewPOST } from '../../src/app/api/ai/voices/preview/route';
+import { POST as AudioBookPOST } from '@/app/api/ai/audiobook/route';
+import { POST as AudioBookCancelPOST } from '@/app/api/ai/audiobook/cancel/route';
+import { POST as VoicePreviewPOST } from '@/app/api/ai/voices/preview/route';
 
 function createRequest(body: any) {
     return new NextRequest('http://localhost:3000/api/mock', {
