@@ -12,6 +12,10 @@ export default defineConfig({
     test: {
         environment: 'node',
         globals: true,
+        alias: {
+            '@': path.resolve(__dirname, '../../src'),
+            '@/lib': path.resolve(__dirname, '../../src/lib')
+        },
         setupFiles: ['./uat/headless/setup.ts'],
         testTimeout: 30000,
         hookTimeout: 30000,

@@ -16,19 +16,20 @@ import {
 import type { Project, Chapter, Entity, ChapterVersion, Series } from './types';
 import { computeProjectStyle } from './style-engine';
 
-// Simple EventEmitter-like pattern for subscriptions
+type EventCallback = (data?: any) => void;
+
 class LocalEventEmitter {
-  private listeners: { [key: string]: Function[] } = {};
+  private listeners: { [key: string]: EventCallback[] } = {};
   
-  subscribe(event: string, callback: Function) {
+  subscribe(event: string, callback: EventCallback) {
     if (!this.listeners[event]) this.listeners[event] = [];
     this.listeners[event].push(callback);
     return () => {
-      this.listeners[event] = this.listeners[event].filter(cb => cb !== callback);
+      this.listeners[event] = (this.listeners[event] || []).filter(cb => cb !== callback);
     };
   }
   
-  emit(event: string, data?: any) {
+  emit(event: string, data?: unknown) {
     if (this.listeners[event]) {
       this.listeners[event].forEach(cb => cb(data));
     }

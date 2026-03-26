@@ -1,7 +1,8 @@
 import { z } from 'zod';
+import * as dotenv from 'dotenv';
 
 const OLLAMA_URL = process.env.NEXT_PUBLIC_OLLAMA_URL || 'http://127.0.0.1:11434';
-const JUDGE_MODEL = 'phi3.5:3.8b-mini-instruct-q5_K_M';
+const JUDGE_MODEL = 'qwen3.5:9b';
 
 export async function evaluateLLM<T>(
     systemInstruction: string,
@@ -10,7 +11,8 @@ export async function evaluateLLM<T>(
 ): Promise<T> {
 
     // First attempt
-    let rawResponse = await callOllama(systemInstruction, prompt);
+    const rawResponse = await callOllama(systemInstruction, prompt);
+    console.log(`[LLM Judge] Raw response (1st): ${rawResponse.substring(0, 100)}...`);
 
     try {
         // Parse and validate
@@ -31,6 +33,7 @@ Please repair the JSON so that it perfectly matches the required schema. Return 
 `;
 
         const retryResponse = await callOllama("You are a strict JSON repair bot.", repairPrompt);
+        console.log(`[LLM Judge] Raw response (retry): ${retryResponse.substring(0, 100)}...`);
         const retryParsed = JSON.parse(retryResponse);
         return schema.parse(retryParsed);
     }

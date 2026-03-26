@@ -13,32 +13,33 @@ export const auth = {
   getUser: async (uid: string) => MOCK_USER,
 };
 
-const mockFirestore = () => ({
-  collection: (name: string) => ({
+const mockFirestore = () => {
+  const collection: any = (name: string) => ({
     doc: (id?: string) => {
-      const docId = id || `mock-id-${Math.random().toString(36).substr(2, 9)}`;
+      const docId = id || `mock-id-${Math.random().toString(36).substring(2, 9)}`;
       return {
         id: docId,
         get: async () => ({ 
           id: docId,
           exists: true, 
-          data: () => ({ userId: MOCK_USER.uid }) as any 
+          data: () => ({ userId: MOCK_USER.uid }) as Record<string, unknown>
         }),
-        set: async (data: any) => ({}),
-        update: async (data: any) => ({}),
+        set: async (data: Record<string, unknown>) => ({}),
+        update: async (data: Record<string, unknown>) => ({}),
         delete: async () => ({}),
       };
     },
-    add: async (data: any) => ({ id: 'mock-id' }),
-    where: function(...args: any[]) { return this; },
-    orderBy: function(...args: any[]) { return this; },
-    limit: function(...args: any[]) { return this; },
+    add: async (data: Record<string, unknown>) => ({ id: 'mock-id' }),
+    where: function(...args: unknown[]) { return this; },
+    orderBy: function(...args: unknown[]) { return this; },
+    limit: function(...args: unknown[]) { return this; },
     get: async () => ({ 
         empty: false, 
-        docs: [] as any[] 
+        docs: [] as unknown[] 
     }),
-  }),
-});
+  });
+  return collection;
+};
 
 export const db = mockFirestore();
 export const firestore = mockFirestore;
@@ -46,10 +47,10 @@ export const firestore = mockFirestore;
 export const storage = () => ({
   bucket: () => ({
     file: () => ({
-      save: async (data: any) => ({}),
+      save: async (data: Buffer | string | Uint8Array) => ({}),
       download: async () => [Buffer.from([])],
       delete: async () => ({}),
-      getSignedUrl: async (options: any) => ['#'],
+      getSignedUrl: async (options: { action: string; expires: string | number | Date }) => ['#'],
     }),
   }),
 });

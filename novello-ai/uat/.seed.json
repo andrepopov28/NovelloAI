@@ -2,9 +2,9 @@
   "userId": "uat-user-1",
   "userEmail": "uat.user@test.com",
   "userPassword": "password123",
-  "customToken": "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJhdWQiOiJodHRwczovL2lkZW50aXR5dG9vbGtpdC5nb29nbGVhcGlzLmNvbS9nb29nbGUuaWRlbnRpdHkuaWRlbnRpdHl0b29sa2l0LnYxLklkZW50aXR5VG9vbGtpdCIsImlhdCI6MTc3MTYzNzM1MiwiZXhwIjoxNzcxNjQwOTUyLCJpc3MiOiJmaXJlYmFzZS1hdXRoLWVtdWxhdG9yQGV4YW1wbGUuY29tIiwic3ViIjoiZmlyZWJhc2UtYXV0aC1lbXVsYXRvckBleGFtcGxlLmNvbSIsInVpZCI6InVhdC11c2VyLTEifQ.",
+  "customToken": "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJhdWQiOiJodHRwczovL2lkZW50aXR5dG9vbGtpdC5nb29nbGVhcGlzLmNvbS9nb29nbGUuaWRlbnRpdHkuaWRlbnRpdHl0b29sa2l0LnYxLklkZW50aXR5VG9vbGtpdCIsImlhdCI6MTc3NDUyMTI4OSwiZXhwIjoxNzc0NTI0ODg5LCJpc3MiOiJmaXJlYmFzZS1hdXRoLWVtdWxhdG9yQGV4YW1wbGUuY29tIiwic3ViIjoiZmlyZWJhc2UtYXV0aC1lbXVsYXRvckBleGFtcGxlLmNvbSIsInVpZCI6InVhdC11c2VyLTEifQ.",
   "projectId": "uat-project-1",
   "chapterId": "uat-chapter-1",
   "entityId": "uat-entity-1",
-  "seededAt": "2026-02-21T01:29:12.513Z"
+  "seededAt": "2026-03-26T10:34:49.146Z"
 }

@@ -101,7 +101,7 @@ export function useWritingSession(projectId: string, currentWordCount: number) {
         const sessionDates = new Set(sessions.map(s => s.date));
         const t = today();
         let count = 0;
-        let cursor = new Date(t);
+        const cursor = new Date(t);
         while (sessionDates.has(cursor.toISOString().slice(0, 10))) {
             count++;
             cursor.setDate(cursor.getDate() - 1);

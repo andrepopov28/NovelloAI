@@ -4,25 +4,25 @@
 
 export const initializeApp = () => ({});
 export const getAuth = () => ({
-  onAuthStateChanged: (callback: any) => () => {},
+  onAuthStateChanged: (callback: (user: unknown) => void) => () => {},
 });
 export const getFirestore = () => ({});
 export const getStorage = () => ({});
 
 // Firestore stubs
-export const collection = (...args: any[]) => ({});
-export const query = (...args: any[]) => ({});
-export const where = (...args: any[]) => ({});
-export const orderBy = (...args: any[]) => ({});
-export const limit = (...args: any[]) => ({});
-export const getDocs = async (...args: any[]) => ({ docs: [] as any[] });
-export const doc = (...args: any[]) => ({});
-export const getDoc = async (...args: any[]) => ({ exists: () => false, data: () => ({}) as any });
-export const setDoc = async (...args: any[]) => ({});
-export const updateDoc = async (...args: any[]) => ({});
-export const deleteDoc = async (...args: any[]) => ({});
-export const onSnapshot = (...args: any[]) => () => {};
-export const writeBatch = (...args: any[]) => ({
+export const collection = (...args: unknown[]) => ({});
+export const query = (...args: unknown[]) => ({});
+export const where = (...args: unknown[]) => ({});
+export const orderBy = (...args: unknown[]) => ({});
+export const limit = (...args: unknown[]) => ({});
+export const getDocs = async (...args: unknown[]) => ({ docs: [] as unknown[] });
+export const doc = (...args: unknown[]) => ({});
+export const getDoc = async (...args: unknown[]) => ({ exists: () => false, data: () => ({}) as Record<string, unknown> });
+export const setDoc = async (...args: unknown[]) => ({});
+export const updateDoc = async (...args: unknown[]) => ({});
+export const deleteDoc = async (...args: unknown[]) => ({});
+export const onSnapshot = (...args: unknown[]) => () => {};
+export const writeBatch = (...args: unknown[]) => ({
   set: () => {},
   update: () => {},
   delete: () => {},
@@ -30,14 +30,14 @@ export const writeBatch = (...args: any[]) => ({
 });
 
 // Legacy/Helper exports
-export const getFirebaseDb = (...args: any[]) => ({});
+export const getFirebaseDb = (...args: unknown[]) => ({});
 export const Timestamp = {
   now: () => new Date(),
   fromDate: (date: Date) => date,
 };
 
 // Auth stubs
-export const signInWithPopup = async (...args: any[]) => ({ user: { uid: 'local-user' } });
+export const signInWithPopup = async (...args: unknown[]) => ({ user: { uid: 'local-user' } });
 export const GoogleAuthProvider = class {};
 
 export default {

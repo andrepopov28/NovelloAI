@@ -52,8 +52,9 @@ export async function POST(req: Request) {
     try {
         const raw = await req.json();
         body = AudiobookRequestSchema.parse(raw);
-    } catch (e: any) {
-        return new Response(JSON.stringify({ error: 'Invalid request payload', details: e.errors ?? e.message }), { status: 400 });
+    } catch (e: unknown) {
+        const error = e as { errors?: unknown; message?: string };
+        return new Response(JSON.stringify({ error: 'Invalid request payload', details: error.errors ?? error.message }), { status: 400 });
     }
 
     const exportId = crypto.randomUUID();
@@ -88,8 +89,9 @@ export async function POST(req: Request) {
                         break;
                     }
                 }
-            } catch (err: any) {
-                send({ type: 'error', stage: 'tts', currentChapter: 0, totalChapters: body.chapters.length, percentComplete: 0, message: err.message });
+            } catch (err: unknown) {
+                const error = err as Error;
+                send({ type: 'error', stage: 'tts', currentChapter: 0, totalChapters: body.chapters.length, percentComplete: 0, message: error.message });
             } finally {
                 controller.close();
             }

@@ -26,6 +26,37 @@ vi.mock('@/lib/queue/audiobookQueue', async () => ({
 
 vi.mock('@/lib/types', async () => ({}));
 
+vi.mock('child_process', async () => ({
+    execFile: vi.fn((bin, args, opts, cb) => {
+        if (typeof opts === 'function') opts(null, { stdout: '' }, '');
+        else if (typeof cb === 'function') cb(null, { stdout: '' }, '');
+    }),
+    spawn: vi.fn(),
+    execSync: vi.fn().mockReturnValue(Buffer.from('')),
+}));
+
+vi.mock('fs', async () => ({
+    createReadStream: vi.fn().mockReturnValue({
+        pipe: vi.fn(),
+        on: vi.fn(),
+    }),
+    createWriteStream: vi.fn().mockReturnValue({
+        on: vi.fn(),
+        write: vi.fn(),
+        end: vi.fn(),
+    }),
+}));
+
+vi.mock('fs/promises', async () => ({
+    default: {
+        access: vi.fn().mockResolvedValue(undefined),
+        readFile: vi.fn().mockResolvedValue(Buffer.from('mock-audio')),
+        writeFile: vi.fn().mockResolvedValue(undefined),
+        unlink: vi.fn().mockResolvedValue(undefined),
+        mkdir: vi.fn().mockResolvedValue(undefined),
+    }
+}));
+
 // Import the route handlers directly
 import { POST as AudioBookPOST } from '../../src/app/api/ai/audiobook/route';
 import { POST as AudioBookCancelPOST } from '../../src/app/api/ai/audiobook/cancel/route';
@@ -47,14 +78,16 @@ describe('API Contract Validations (Strict Zod Schemas)', () => {
     describe('POST /api/ai/audiobook', () => {
         it('should accept valid payload', async () => {
             const req = createRequest({
-                projectId: 'prod-123',
+                projectTitle: 'My Project',
+                chapters: [
+                    { id: 'ch-1', title: 'Chapter 1', content: 'Hello', order: 0 }
+                ],
                 settings: {
-                    voiceId: 'voice-1',
+                    voiceId: 'en_US-lessac-high.onnx',
                     speed: 1.5
                 }
             });
             const res = await AudioBookPOST(req);
-            // Even if queue fails internally in mock, we just want to ensure it didn't return 400 Bad Request
             expect(res.status).not.toBe(400);
         });
 
@@ -85,7 +118,7 @@ describe('API Contract Validations (Strict Zod Schemas)', () => {
 
     describe('POST /api/ai/audiobook/cancel', () => {
         it('should accept valid payload', async () => {
-            const req = createRequest({ exportId: 'export-123' });
+            const req = createRequest({ exportId: '550e8400-e29b-41d4-a716-446655440000' });
             const res = await AudioBookCancelPOST(req);
             expect(res.status).not.toBe(400);
         });
@@ -104,10 +137,9 @@ describe('API Contract Validations (Strict Zod Schemas)', () => {
         it('should accept valid payload', async () => {
             const req = createRequest({
                 text: 'Hello world',
-                engineVoiceId: 'en_US-lessac-high'
+                engineVoiceId: 'en_US-lessac-high.onnx'
             });
             const res = await VoicePreviewPOST(req);
-            // It might fail 500 locally because of missing Piper/Storage mocks, but it shouldn't 400
             expect(res.status).not.toBe(400);
         });
 

@@ -147,16 +147,6 @@ async function synthesiseChapter(
     const tmpTxt = `${outputWav}.txt`;
     await fs.writeFile(tmpTxt, text, 'utf-8');
 
-    try {
-        const { stderr } = await execFileAsync(PIPER_BIN, piperArgs, {
-            stdin: 'pipe',
-        } as any);
-        // Piper reads from stdin — use shell redirect via node streams instead
-    } catch {
-        // execFileAsync with stdin piping doesn't work trivially via promisify;
-        // use a manual spawn approach:
-    }
-
     // More reliable: spawn with stdin pipe
     await new Promise<void>((resolve, reject) => {
         const txt = createReadStream(tmpTxt);
@@ -393,14 +383,15 @@ export async function* generateAudiobook(
                 for (const w of chunkWavs) await fs.unlink(w).catch(() => {});
             }
             wavFiles.push(wavOut);
-        } catch (err: any) {
+        } catch (err: unknown) {
+            const error = err as Error;
             yield {
                 type: 'error',
                 stage: 'tts',
                 currentChapter: i + 1,
                 totalChapters: total,
                 percentComplete: Math.round((i / total) * 80),
-                message: `Piper failed for chapter ${i + 1}: ${err.message}`,
+                message: `Piper failed for chapter ${i + 1}: ${error.message}`,
             };
             return;
         }
@@ -422,8 +413,9 @@ export async function* generateAudiobook(
         const result = await concatenateToM4B(wavFiles, settings.pauseDurationMs, chapterTitles, bookTitle, exportDir, exportId, settings.bitrateKbps || 64);
         outputPath = result.outputPath;
         durationSeconds = result.durationSeconds;
-    } catch (err: any) {
-        yield { type: 'error', stage: 'concatenating', currentChapter: total, totalChapters: total, percentComplete: 85, message: `FFmpeg failed: ${err.message}` };
+    } catch (err: unknown) {
+        const error = err as Error;
+        yield { type: 'error', stage: 'concatenating', currentChapter: total, totalChapters: total, percentComplete: 85, message: `FFmpeg failed: ${error.message}` };
         return;
     }
 

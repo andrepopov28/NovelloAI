@@ -1,9 +1,9 @@
 # Novello AI — Product Requirements Document
-**Version:** V34.3 (Product Expansion)  
-**Status:** Production-Ready (Local-First Build Complete)  
-**Supersedes:** V34.2  
-**Last Updated:** 2026-03-24  
-**Build Commit:** d92e2cb  
+**Version:** V34.4 (Stability & Hardening)  
+**Status:** Production-Ready (Verified via UAT)  
+**Supersedes:** V34.3  
+**Last Audit:** 2026-03-26 | **Auditor:** Antigravity AI (Hardening Sprint)
+2f4d6  
 
 ---
 
@@ -27,7 +27,10 @@ Novello AI is an AI-native manuscript development platform. The AI acts as a "Wo
 | Security Hardening (V34.2) | ✅ Red-team audit complete — shell injection, auth bypass, export endpoints, SSR guards all fixed |
 | Skeuomorphic Redesign (V33) | ✅ Publisher theme, premium buttons, flush avatars |
 | Write Node Stability (V33) | ✅ TipTap Editor crash (`localsInner`) resolved |
-| **Product Expansion (V34.3)** | ✅ Board View, Streak Calendar, Chapter Templates, Prose Coach, AI Beta Reader, LLM Style Engine, Plot Hole Detector, Ghost Writer (Streaming) all wired into right-hand sidebar and GlobalNav. |
+| **Stability Overhaul (V34.4)** | ✅ Backend Hardening — 100% UAT pass rate (Core), `any` type elimination, `undici` security patch, Vitest alias resolution fixed |
+| **Dependency Vulnerabilities** | ✅ Fixed | Upgraded `undici` to 6.21.1 to resolve CVE-2024-30260 (Proxy header leak) |
+| **Backend Type Safety** | ✅ Fixed | Removed `any` from `firebase-admin.ts`, `firestore.ts`, and core API routes |
+| Rate Limiting | 🔜 Planned | No multi-user abuse surface in local deployment |
 
 ---
 
