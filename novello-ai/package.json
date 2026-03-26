@@ -13,7 +13,7 @@
     "uat:up": "docker compose -f docker-compose.uat.yml up -d",
     "uat:down": "docker compose -f docker-compose.uat.yml down -v",
     "uat:seed": "tsx uat/scripts/seed.ts",
-    "uat:headless": "vitest run --dir uat/headless",
+    "uat:headless": "vitest run",
     "uat:headed": "playwright test -c uat/headed/playwright.config.ts",
     "uat:all": "pnpm uat:up && pnpm uat:seed && pnpm uat:headless && pnpm uat:headed && pnpm uat:down"
   },
