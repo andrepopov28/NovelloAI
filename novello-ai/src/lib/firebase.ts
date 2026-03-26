@@ -10,19 +10,19 @@ export const getFirestore = () => ({});
 export const getStorage = () => ({});
 
 // Firestore stubs
-export const collection = (...args: unknown[]) => ({});
-export const query = (...args: unknown[]) => ({});
-export const where = (...args: unknown[]) => ({});
-export const orderBy = (...args: unknown[]) => ({});
-export const limit = (...args: unknown[]) => ({});
-export const getDocs = async (...args: unknown[]) => ({ docs: [] as unknown[] });
-export const doc = (...args: unknown[]) => ({});
-export const getDoc = async (...args: unknown[]) => ({ exists: () => false, data: () => ({}) as Record<string, unknown> });
-export const setDoc = async (...args: unknown[]) => ({});
-export const updateDoc = async (...args: unknown[]) => ({});
-export const deleteDoc = async (...args: unknown[]) => ({});
-export const onSnapshot = (...args: unknown[]) => () => {};
-export const writeBatch = (...args: unknown[]) => ({
+export const collection = (..._args: unknown[]) => ({});
+export const query = (..._args: unknown[]) => ({});
+export const where = (..._args: unknown[]) => ({});
+export const orderBy = (..._args: unknown[]) => ({});
+export const limit = (..._args: unknown[]) => ({});
+export const getDocs = async (..._args: unknown[]) => ({ docs: [] as unknown[] });
+export const doc = (..._args: unknown[]) => ({});
+export const getDoc = async (..._args: unknown[]) => ({ exists: () => false, data: () => ({}) as Record<string, unknown> });
+export const setDoc = async (..._args: unknown[]) => ({});
+export const updateDoc = async (..._args: unknown[]) => ({});
+export const deleteDoc = async (..._args: unknown[]) => ({});
+export const onSnapshot = (..._args: unknown[]) => () => {};
+export const writeBatch = (..._args: unknown[]) => ({
   set: () => {},
   update: () => {},
   delete: () => {},
@@ -30,14 +30,14 @@ export const writeBatch = (...args: unknown[]) => ({
 });
 
 // Legacy/Helper exports
-export const getFirebaseDb = (...args: unknown[]) => ({});
+export const getFirebaseDb = (..._args: unknown[]) => ({});
 export const Timestamp = {
   now: () => new Date(),
   fromDate: (date: Date) => date,
 };
 
 // Auth stubs
-export const signInWithPopup = async (...args: unknown[]) => ({ user: { uid: 'local-user' } });
+export const signInWithPopup = async (..._args: unknown[]) => ({ user: { uid: 'local-user' } });
 export const GoogleAuthProvider = class {};
 
 export default {

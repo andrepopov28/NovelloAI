@@ -1,0 +1,53 @@
+name: NovelloAI UAT & Stability Verify
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  uat:
+    runs-on: ubuntu-latest
+
+    services:
+      docker:
+        image: docker:24.0.5-dind
+        options: --privileged
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/checkout@v4
+        with:
+          node-version: '20'
+
+      - name: Install Pnpm
+        run: npm install -g pnpm
+
+      - name: Install Dependencies
+        run: pnpm install
+
+      - name: Start UAT Infrastructure (Mocks)
+        run: |
+          # Use the provided UAT up script
+          npm run uat:up
+          # Wait for services to be ready
+          sleep 15
+
+      - name: Seed UAT Data
+        run: npm run uat:seed
+
+      - name: Run Headless UAT Suite
+        env:
+          CI: true
+        run: npm run uat:headless
+
+      - name: Run Lint Check
+        run: npm run lint
+
+      - name: Cleanup
+        if: always()
+        run: npm run uat:down

@@ -44,8 +44,15 @@ export function useContinuityChecker(projectId: string) {
 
             const data = await res.json();
 
+            interface AIAlert {
+                type: 'contradiction' | 'repetition' | 'prose' | 'logic';
+                severity: 'warning' | 'error' | 'info';
+                message: string;
+                quote?: string;
+            }
+
             if (data.alerts && Array.isArray(data.alerts)) {
-                const newAlerts: ContinuityAlert[] = data.alerts.map((a: any) => ({
+                const newAlerts: ContinuityAlert[] = data.alerts.map((a: AIAlert) => ({
                     id: crypto.randomUUID(),
                     projectId,
                     userId: user.uid,

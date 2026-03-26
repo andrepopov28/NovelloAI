@@ -251,7 +251,7 @@ export function GlobalNav() {
                                                 backdropFilter: 'var(--glass-blur)'
                                             }}
                                         >
-                                            {item.subNodes.map((sub: any) => (
+                                            {item.subNodes.map((sub: { label: string; href: string; description?: string }) => (
                                                 <Link
                                                     key={sub.label}
                                                     href={sub.href}
@@ -261,9 +261,11 @@ export function GlobalNav() {
                                                     <span className="text-[12px] font-bold text-[var(--accent-warm)] mb-1 uppercase tracking-wider group-hover/item:text-[var(--text-primary)] transition-colors">
                                                         {sub.label}
                                                     </span>
-                                                    <span className="text-[12px] text-[var(--text-secondary)]">
-                                                        {sub.description}
-                                                    </span>
+                                                    {sub.description && (
+                                                        <span className="text-[12px] text-[var(--text-secondary)]">
+                                                            {sub.description}
+                                                        </span>
+                                                    )}
                                                 </Link>
                                             ))}
                                         </div>
