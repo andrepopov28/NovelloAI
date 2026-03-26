@@ -36,7 +36,7 @@ jobs:
           cache-dependency-path: novello-ai/pnpm-lock.yaml
 
       - name: Install Dependencies
-        run: pnpm install
+        run: pnpm install --no-frozen-lockfile
 
       - name: Start UAT Infrastructure (Mocks)
         run: |
