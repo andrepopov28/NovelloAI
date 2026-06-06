@@ -27,24 +27,28 @@ vi.mock('@/lib/queue/audiobookQueue', async () => ({
 vi.mock('@/lib/types', async () => ({}));
 
 vi.mock('child_process', async () => ({
-    execFile: vi.fn((bin, args, opts, cb) => {
-        if (typeof opts === 'function') opts(null, { stdout: '' }, '');
-        else if (typeof cb === 'function') cb(null, { stdout: '' }, '');
-    }),
-    spawn: vi.fn(),
-    execSync: vi.fn().mockReturnValue(Buffer.from('')),
+    default: {
+        execFile: vi.fn((bin, args, opts, cb) => {
+            if (typeof opts === 'function') opts(null, { stdout: '' }, '');
+            else if (typeof cb === 'function') cb(null, { stdout: '' }, '');
+        }),
+        spawn: vi.fn(),
+        execSync: vi.fn().mockReturnValue(Buffer.from('')),
+    },
 }));
 
 vi.mock('fs', async () => ({
-    createReadStream: vi.fn().mockReturnValue({
-        pipe: vi.fn(),
-        on: vi.fn(),
-    }),
-    createWriteStream: vi.fn().mockReturnValue({
-        on: vi.fn(),
-        write: vi.fn(),
-        end: vi.fn(),
-    }),
+    default: {
+        createReadStream: vi.fn().mockReturnValue({
+            pipe: vi.fn(),
+            on: vi.fn(),
+        }),
+        createWriteStream: vi.fn().mockReturnValue({
+            on: vi.fn(),
+            write: vi.fn(),
+            end: vi.fn(),
+        }),
+    },
 }));
 
 vi.mock('fs/promises', async () => ({
@@ -58,9 +62,9 @@ vi.mock('fs/promises', async () => ({
 }));
 
 // Import the route handlers directly
-import { POST as AudioBookPOST } from '@/app/api/ai/audiobook/route';
-import { POST as AudioBookCancelPOST } from '@/app/api/ai/audiobook/cancel/route';
-import { POST as VoicePreviewPOST } from '@/app/api/ai/voices/preview/route';
+import { POST as AudioBookPOST } from '../../src/app/api/ai/audiobook/route';
+import { POST as AudioBookCancelPOST } from '../../src/app/api/ai/audiobook/cancel/route';
+import { POST as VoicePreviewPOST } from '../../src/app/api/ai/voices/preview/route';
 
 function createRequest(body: any) {
     return new NextRequest('http://localhost:3000/api/mock', {

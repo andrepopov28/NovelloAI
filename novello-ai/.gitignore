@@ -41,7 +41,7 @@ yarn-error.log*
 next-env.d.ts
 
 # Voice models (large binary files — too big for GitHub)
-voices/
+# voices/
 *.onnx
 *.onnx.json
 tmp/
